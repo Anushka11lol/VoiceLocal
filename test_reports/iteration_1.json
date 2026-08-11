@@ -1,0 +1,32 @@
+{
+  "summary": "Full-stack testing of VoiceLocal. Backend: 11/11 pytest cases passed (languages 23, auth register/login/me/invalid, real LLM Hindi->Bengali translation returning native Bengali script, real TTS returning base64 mp3, projects CRUD + user isolation, analytics, protected-route 401s). Frontend: Landing hero 'One Video. Every Voice.' with left sidebar and screen-reader toggle (OFF <-> ON) works. Demo flow: /demo -> run-demo-btn -> /localize?demo=1 prefilled -> generate-btn -> processing-screen -> /results (Original/Localized/Subtitles tabs, localized-audio, real Bengali transcript, sub-size/pos/style controls on Subtitles tab, Download Video/Audio/SRT buttons). Manual /localize: dropzone -> upload file -> source-language-select with 'Detected language: Hindi 97%' -> generate with no target shows toast 'Please select at least one target language.' Auth: /dashboard while logged out redirects to /login; login demo@voicelocal.app/demo123 -> dashboard with Welcome back, 4 stat cards (12/37/84/+42%) and new-localization-btn. History and Analytics render with project cards and recharts.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Localize (target language cards)", "issues": ["A few native-script labels (e.g. Odia, Kannada) appear visually clipped/overflow inside the small cards on 1920px viewport; may need slightly larger cards or truncation with title tooltip"]},
+      {"screen": "Results page", "issues": ["Reloading /results loses in-memory state and redirects back to /localize (expected for demo but users may bookmark). Consider persisting last result in localStorage."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "(Optional) Persist latest results in localStorage so /results survives reload.",
+    "(Optional) Investigate React hydration warning 'span cannot be a child of option' emitted from Localize.js line 231 by data-editor instrumentation — likely dev-only tooling artifact but noisy in console."
+  ],
+  "critical_code_review_comments": [
+    "server.py uses model 'openai/gpt-5.4' via LlmChat — appears to be a plausible new model; translation succeeded in tests, keep an eye on availability.",
+    "get_current_user also accepts cookie-based token, but frontend only uses Authorization header — fine.",
+    "MongoDB _id is properly excluded from list/get project responses via projection and .pop().",
+    "CORS uses '*' with allow_credentials=True which browsers reject when a specific origin is required for cookies; not an issue today because frontend uses Bearer tokens, but if cookie-auth is ever enabled set explicit origins.",
+    "Password minimum length not validated server-side beyond Pydantic default; add min length constraint to RegisterIn."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "demo@voicelocal.app / demo123 (seeded); signup with new email also works.",
+  "seed_data_creation": "Created one TEST project via API during pytest; visible on dashboard/history.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend base URL from REACT_APP_BACKEND_URL. Auth via Bearer JWT (localStorage vl_token). Real LLM translation + real OpenAI TTS via EMERGENT_LLM_KEY (~30-60s end-to-end for demo generate). Demo route /localize?demo=1 skips upload and jumps straight to translate+tts. Subtitle size/position/style testids live under the Subtitles tab on /results.",
+  "rca of the issue": "No blocking bugs found."
+}

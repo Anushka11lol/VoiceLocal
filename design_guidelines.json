@@ -1,0 +1,139 @@
+{
+  "theme": "light",
+  "theme_description": "Exclusive Light Theme per user request. Archetype 3 (Pastel & Soft) mixed with vibrant Indian cultural accents. The UI must feel simple, approachable, and highly accessible, avoiding any dark mode interfaces or purple hues.",
+  "colors": {
+    "background": {
+      "default": "#F4F9FF",
+      "paper": "#FFFFFF",
+      "sidebar": "#FFFFFF",
+      "elevated": "#FAFCFF"
+    },
+    "primary": {
+      "main": "#800000",
+      "light": "#A52A2A",
+      "contrastText": "#FFFFFF"
+    },
+    "accent": {
+      "main": "#FF66B2",
+      "light": "#FF99CC",
+      "subtle": "#FFE5F2"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#475569",
+      "disabled": "#94A3B8"
+    },
+    "border": {
+      "light": "#E2E8F0",
+      "focus": "#FF66B2"
+    },
+    "forbidden_colors": [
+      "#7351B7",
+      "any purple shades",
+      "dark theme backgrounds like #000000, #121212"
+    ]
+  },
+  "typography": {
+    "font_families": {
+      "heading": "'Outfit', sans-serif",
+      "body": "'Figtree', sans-serif"
+    },
+    "rules": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight text-slate-900",
+      "h2": "text-3xl font-semibold tracking-tight text-slate-800",
+      "h3": "text-xl font-medium text-slate-800",
+      "body": "text-base leading-relaxed text-slate-600",
+      "forbidden_fonts": ["Inter", "Roboto", "Open Sans"]
+    }
+  },
+  "layouts": {
+    "global_structure": "Left Sidebar App Navigation. The screen layout should comprise a fixed left sidebar (w-64) for navigation and a main content area that takes up the remaining width. A top header inside the main content area should hold the screen-reader toggle (top-right) and user profile.",
+    "dashboard_grid": "Mode B: High Density Grid. grid-cols-1 md:grid-cols-2 lg:grid-cols-4 with gap-6 for stat cards. Ensure items stretch equally.",
+    "marketing_landing": "Mode A: Tetris Grid. Generous spacing (py-24, gap-12). Left-aligned text blocks with asymmetrical imagery.",
+    "spacing_scale": "Use Tailwind generous spacing (p-6, p-8) for cards. Internal padding is mandatory for containers with borders."
+  },
+  "components": {
+    "navigation_sidebar": {
+      "style": "bg-white border-r border-slate-200 h-screen fixed left-0 top-0 w-64 p-4",
+      "items": "Home, How It Works, Features, Demo, Dashboard, Localize, History, Analytics",
+      "active_state": "bg-pink-50 text-maroon-800 border-r-4 border-maroon-800 font-medium"
+    },
+    "screen_reader_toggle": {
+      "placement": "Fixed or clearly positioned at the top-right corner of the application interface.",
+      "style": "pill-shaped button, visible focus ring (ring-2 ring-pink-400 ring-offset-2), aria-label applied."
+    },
+    "localization_workspace": {
+      "stepper": "Horizontal step indicator (Upload -> Analyze -> Translate -> Dub -> Export). Active step highlighted in Maroon, completed steps in Pink.",
+      "upload_zone": "Dashed border (border-2 border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 transition-colors). Drag & drop area with clear iconography.",
+      "language_selector": "Multi-select cards with Indian language names in English and native script. Subtle shadow, hover scale.",
+      "processing_screen": "Animated waveform using the Accent pink color. Loop animation to indicate active translation/dubbing.",
+      "results_tabs": "Original | Localized | Subtitles. Use Shadcn Tabs but styled card-less with underline indicators in Maroon."
+    },
+    "players_and_viewers": {
+      "video_comparison": "Before/After synchronized players. Side-by-side on desktop, stacked on mobile.",
+      "transcript_viewer": "Split pane (Source Language | Target Language). Clickable timestamps must have a subtle hover highlight (bg-blue-50).",
+      "subtitle_preview": "Overlay on video with draggable/customizable controls (size, color, background pill)."
+    },
+    "cards": {
+      "style": "bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-6",
+      "forbidden": "Do not use generic drop-shadows. Stick to subtle tailwind shadow-sm."
+    }
+  },
+  "motion": {
+    "page_transitions": "Subtle fade-in (opacity 0 to 1, y: 10 to 0) using Framer Motion.",
+    "hover_states": "-translate-y-1 on cards. Buttons should have a slight scale-105 on active/hover.",
+    "processing_state": "Pulse animations on the audio waveform during the 'Analyze' and 'Dub' steps.",
+    "universal_transition_forbidden": "Do NOT use `transition: all`. Specify `transition-colors`, `transition-transform`, etc."
+  },
+  "accessibility": {
+    "screen_reader": "Toggle must dynamically add/remove an 'aria-live' region or augment labels. Ensure 100% of inputs have associated `<label>`.",
+    "focus_states": "All interactive elements MUST have focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2.",
+    "contrast": "Text must meet APCA/WCAG AA against backgrounds. Ensure pink and maroon contrast well against the light blue/white backgrounds.",
+    "data_testid": "MANDATORY. Add `data-testid` attributes to all buttons, tabs, inputs, and links."
+  },
+  "image_urls": {
+    "hero_creator": {
+      "url": "https://images.unsplash.com/photo-1568316280532-71d1baad0986?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjB2aWRlbyUyMGNyZWF0b3J8ZW58MHx8fHwxNzg2NDY1NDYxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Young Indian video creator looking at camera",
+      "usage": "Hero section imagery, demonstrating the target audience."
+    },
+    "dashboard_user": {
+      "url": "https://images.unsplash.com/photo-1683107695974-98a9fddb249a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjB3b21hbiUyMGxhcHRvcHxlbnwwfHx8fDE3ODY0NjU0NjF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Woman working at a laptop",
+      "usage": "Dashboard empty state or 'How it works' section."
+    },
+    "processing_abstract": {
+      "url": "https://images.unsplash.com/photo-1724185773486-0b39642e607e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA8Mzl8MHwxfHNlYXJjaHwyfHxzb3VuZCUyMHdhdmUlMjBhYnN0cmFjdHxlbnwwfHx8fDE3ODY0NjU0NjF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Colorful sound wave",
+      "usage": "Visual enhancer for the 'AI Architecture Pipeline' or the Processing Screen."
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Avoid heavy glass on this specific health/utility-like dashboard to maintain crisp legibility. Use Solid surfaces with 1px borders.",
+    "gradients": "Avoid full screen gradients. Use subtle linear gradients for buttons only (e.g., Maroon to Light Maroon) or keep them solid.",
+    "shadows": "Use layered ambient shadows. shadow-[0_2px_10px_rgba(0,0,0,0.05)] for elevated cards."
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: The tech stack requires JavaScript (.js, .jsx), NOT TypeScript (.tsx, .ts). Do not generate .tsx files.",
+    "CRITICAL: Implement the Left Sidebar for App Navigation explicitly. Do not hide it behind a hamburger menu on desktop.",
+    "CRITICAL: Create a visible Screen-Reader Toggle at the top-right corner of the layout.",
+    "CRITICAL: Do not use any Dark Theme classes (like dark:bg-slate-900). The user explicitly requested NO dark themes.",
+    "CRITICAL: Do not use any purple colors. Only use Light Blue, White, Maroon, and Pink as specified.",
+    "CRITICAL: Never use transparent backgrounds under text elements (e.g., dropdowns, sticky headers).",
+    "CRITICAL: Use pure HTML+Tailwind for complex marketing layouts. Use Shadcn components for forms, tabs, and logical UI.",
+    "CRITICAL: Apply `data-testid` to all interactive elements."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Make creative, distinctive frontends that surprise and delight.",
+    "Don't make generic centered layouts. Use asymmetrical or optical alignment.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "You MUST NOT apply universal transition. Eg: `transition: all`.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons. Use Phosphor, Lucide, or Heroicons.",
+    "Every interaction needs micro-animations - hover states, transitions, and entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Use `sonner` for toasts."
+  ]
+}
