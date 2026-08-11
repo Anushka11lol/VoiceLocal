@@ -3,17 +3,17 @@
 }
 
 .sr-badge {
-    background: linear-gradient(135deg, hsl(0 100% 25%), hsl(0 60% 40%));
+    background: #b0455b;
 }
 
 .maroon-gradient {
-    background: linear-gradient(135deg, #800000, #A52A2A);
+    background: #b0455b;
 }
 
 .pink-gradient {
-    background: linear-gradient(135deg, #FF66B2, #FF99CC);
+    background: #ff7fbf;
 }
 
 .hero-glow {
-    background: radial-gradient(60% 60% at 50% 0%, rgba(255,102,178,0.18) 0%, rgba(244,249,255,0) 100%);
+    background: radial-gradient(60% 55% at 50% 0%, rgba(255,127,191,0.10) 0%, rgba(244,249,255,0) 100%);
 }

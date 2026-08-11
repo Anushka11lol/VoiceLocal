@@ -20,7 +20,7 @@ module.exports = {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         maroon: {
-          50: '#fdf2f2', 100: '#fbe0e0', 500: '#A52A2A', 600: '#8f1d1d', 700: '#800000', 800: '#660000', 900: '#4d0000'
+          50: '#fdf3f5', 100: '#fbe4e9', 500: '#c25b6e', 600: '#b85063', 700: '#b0455b', 800: '#9e3e52', 900: '#83323f'
         },
         pink: {
           50: '#FFE5F2', 100: '#FFD1E8', 200: '#FF99CC', 400: '#FF66B2', 500: '#ff4da6', 600: '#e6338f'
