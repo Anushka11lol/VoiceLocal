@@ -24,6 +24,12 @@ function Protected({ children }) {
   return user ? children : <Navigate to="/login" replace />;
 }
 
+function RootRoute() {
+  const { user, ready } = useAuth();
+  if (!ready) return <div className="p-10 text-slate-500">Loading…</div>;
+  return user ? <Shell><Landing /></Shell> : <Navigate to="/login" replace />;
+}
+
 function Shell({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
@@ -40,7 +46,7 @@ function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
 
-              <Route path="/" element={<Shell><Landing /></Shell>} />
+              <Route path="/" element={<RootRoute />} />
               <Route path="/how-it-works" element={<Shell><HowItWorks /></Shell>} />
               <Route path="/features" element={<Shell><Features /></Shell>} />
               <Route path="/demo" element={<Shell><Demo /></Shell>} />
