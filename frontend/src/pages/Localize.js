@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { UploadCloud, X, Check, Film, Info, Sparkles } from "lucide-react";
+import { UploadCloud, X, Check, Film, Info, Sparkles, Volume2 } from "lucide-react";
 import { LANGUAGES, langName, langNative, DEMO_TRANSCRIPT, VOICE_TYPES, VOICE_STYLES } from "../data/languages";
-import { localizationService } from "../services/localizationService";
+import { localizationService, setVideoFile } from "../services/localizationService";
 import { useA11y } from "../context/A11yContext";
 import { Waveform } from "../components/Waveform";
 
@@ -93,10 +93,28 @@ export default function Localize() {
   const [opts, setOpts] = useState({ dubbing: true, subtitles: true, originalAudio: false, music: true, timing: true });
   const [processing, setProcessing] = useState(false);
   const [done, setDone] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const previewAudioRef = useRef(null);
 
   const isDemo = params.get("demo") === "1";
 
   const currentStep = processing ? 3 : file ? (targets.length ? 2 : 1) : 0;
+
+  const playPreview = async () => {
+    setPreviewing(true);
+    try {
+      const lang = targets[0] || (source === "auto" ? detected?.language : source) || "en";
+      const url = await localizationService.previewVoice({ voice, language: lang });
+      if (previewAudioRef.current) {
+        previewAudioRef.current.src = url;
+        previewAudioRef.current.play();
+      }
+    } catch {
+      toast.error("Couldn't play a voice preview right now.");
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   const handleFile = useCallback((f) => {
     if (!f) return;
@@ -110,6 +128,7 @@ export default function Localize() {
       return;
     }
     setFile(f);
+    setVideoFile(f);
     setPreviewUrl(URL.createObjectURL(f));
     setSource("auto");
     localizationService.detectLanguage("hi").then((d) => setDetected(d));
@@ -131,38 +150,50 @@ export default function Localize() {
   const runPipeline = async () => {
     if (!file) { toast.error("Please upload or select a video first."); return; }
     if (targets.length === 0) { toast.error("Please select at least one target language."); return; }
-    const src = source === "auto" ? (detected?.language || "hi") : source;
-    const target = targets[0];
     setProcessing(true);
     setDone(false);
     announce("Localization started. Processing your video.");
     const started = Date.now();
     try {
-      // Translate each transcript segment (parallel) — real LLM
-      const translations = await Promise.all(
-        DEMO_TRANSCRIPT.map((seg) =>
-          localizationService.translateTranscript({ text: seg.text, source_language: src, target_language: target })
-        )
-      );
-      const segments = DEMO_TRANSCRIPT.map((seg, i) => ({ ...seg, translated: translations[i].translated_text }));
-      const fullTranslated = segments.map((s) => s.translated).join(" ");
+      // 1) Source transcript — real STT for uploaded files, demo transcript otherwise
+      let src = source === "auto" ? (detected?.language || "hi") : source;
+      let sourceSegments = DEMO_TRANSCRIPT;
+      if (!file.demo) {
+        const tr = await localizationService.transcribeVideo({ file, language: source });
+        if (tr.segments?.length) sourceSegments = tr.segments;
+        if (source === "auto" && tr.language) src = tr.language;
+      }
 
-      let audio = null;
-      if (opts.dubbing) {
-        const a = await localizationService.generateVoice({ text: fullTranslated, voice, language: target });
-        audio = `data:${a.mime};base64,${a.audio_base64}`;
+      // 2) For each target language: translate every segment + generate dubbed voice
+      const outputs = {};
+      for (const target of targets) {
+        const translations = await Promise.all(
+          sourceSegments.map((seg) =>
+            localizationService.translateTranscript({ text: seg.text, source_language: src, target_language: target })
+          )
+        );
+        const segments = sourceSegments.map((seg, i) => ({ ...seg, translated: translations[i].translated_text }));
+        const fullTranslated = segments.map((s) => s.translated).join(" ");
+        let audio = null;
+        if (opts.dubbing) {
+          const a = await localizationService.generateVoice({ text: fullTranslated, voice, language: target });
+          audio = `data:${a.mime};base64,${a.audio_base64}`;
+        }
+        outputs[target] = { segments, fullTranslated, audio, confidence: translations[0]?.confidence || 95 };
       }
 
       const result = {
         title: file.demo ? "ISRO Explained" : file.name.replace(/\.[^.]+$/, ""),
-        source: src, target, duration: file.duration || "00:42",
+        source: src, targets, duration: file.duration || "00:42",
         voice, style, opts, previewUrl: file.demo ? null : previewUrl,
-        segments, fullTranslated, audio,
-        transcriptConfidence: translations[0]?.confidence || 98,
+        hasVideoFile: !file.demo,
+        sourceSegments,
+        outputs,
+        transcriptConfidence: 98,
       };
       const serialized = JSON.stringify(result);
       sessionStorage.setItem("vl_result", serialized);
-      localStorage.setItem("vl_last_result", serialized);
+      try { localStorage.setItem("vl_last_result", serialized); } catch { /* audio too large for localStorage */ }
 
       const elapsed = Date.now() - started;
       const wait = Math.max(0, 6500 - elapsed);
@@ -294,6 +325,11 @@ export default function Localize() {
                   desc="Preserve the approximate emotional tone and speaking style of the original speaker." />
               </div>
               <p className="text-xs text-slate-400 mt-2">AI-generated localized voice. Voice characteristics are approximated for localization.</p>
+              <button type="button" onClick={playPreview} disabled={previewing} data-testid="voice-preview-btn"
+                className="mt-3 inline-flex items-center gap-2 bg-pink-50 text-maroon-700 rounded-full px-4 py-2 text-sm font-semibold hover:bg-pink-100 transition-colors disabled:opacity-60">
+                <Volume2 className="w-4 h-4" /> {previewing ? "Loading voice…" : "Preview voice"}
+              </button>
+              <audio ref={previewAudioRef} className="hidden" />
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6">

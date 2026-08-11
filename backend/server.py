@@ -3,16 +3,22 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadFile, File, Form
+from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, jwt, bcrypt
+import os, logging, uuid, jwt, bcrypt, tempfile, subprocess, base64, shutil
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.llm.openai import OpenAITextToSpeech
+from emergentintegrations.llm.openai import OpenAITextToSpeech, OpenAISpeechToText
+
+
+def _fmt_ts(seconds: float) -> str:
+    seconds = int(seconds or 0)
+    return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -55,6 +61,14 @@ LANGUAGES = [
     {"code": "sat", "name": "Santali", "native": "ᱥᱟᱱᱛᱟᱲᱤ", "flag": "🇮🇳"},
 ]
 LANG_BY_CODE = {l["code"]: l for l in LANGUAGES}
+
+WHISPER_LANG_MAP = {
+    "english": "en", "hindi": "hi", "bengali": "bn", "assamese": "as", "tamil": "ta",
+    "telugu": "te", "marathi": "mr", "malayalam": "ml", "kannada": "kn", "gujarati": "gu",
+    "punjabi": "pa", "odia": "or", "oriya": "or", "urdu": "ur", "sanskrit": "sa",
+    "kashmiri": "ks", "sindhi": "sd", "nepali": "ne", "konkani": "kok", "maithili": "mai",
+    "dogri": "doi", "bodo": "brx", "manipuri": "mni", "santali": "sat", "sanscrit": "sa",
+}
 
 # ---------------- Auth helpers ----------------
 def hash_password(p: str) -> str:
@@ -200,6 +214,97 @@ async def text_to_speech(body: TTSIn):
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=502, detail="We couldn't generate the localized voice right now. Please try again.")
+
+
+@api_router.post("/localize/transcribe")
+async def transcribe(file: UploadFile = File(...), language: Optional[str] = Form(None)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Transcription service unavailable.")
+    tmpdir = tempfile.mkdtemp(prefix="vl_")
+    src_path = os.path.join(tmpdir, file.filename or "input.mp4")
+    audio_path = os.path.join(tmpdir, "audio.mp3")
+    try:
+        with open(src_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        # Extract compressed mono audio to stay under Whisper's 25MB limit
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src_path, "-vn", "-ac", "1", "-ar", "16000",
+             "-b:a", "64k", audio_path],
+            check=True, capture_output=True, timeout=120,
+        )
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        kwargs = {"model": "whisper-1", "response_format": "verbose_json",
+                  "timestamp_granularities": ["segment"]}
+        if language and language != "auto":
+            kwargs["language"] = language
+        with open(audio_path, "rb") as af:
+            resp = await stt.transcribe(file=af, **kwargs)
+        segments = []
+        raw_segments = getattr(resp, "segments", None) or []
+        for s in raw_segments:
+            start = getattr(s, "start", None)
+            text = getattr(s, "text", None)
+            if start is None and isinstance(s, dict):
+                start, text = s.get("start"), s.get("text")
+            segments.append({"t": _fmt_ts(start or 0), "text": (text or "").strip()})
+        if not segments:
+            segments = [{"t": "00:00", "text": (getattr(resp, "text", "") or "").strip()}]
+        detected = getattr(resp, "language", None) or language or "en"
+        detected = str(detected).lower()
+        detected = WHISPER_LANG_MAP.get(detected, detected if len(detected) <= 3 else "en")
+        return {"segments": segments, "language": detected, "confidence": 96}
+    except subprocess.CalledProcessError:
+        raise HTTPException(status_code=422, detail="We couldn't read the audio from this file. Please try a different video.")
+    except Exception as e:
+        logger.error(f"Transcribe error: {e}")
+        raise HTTPException(status_code=502, detail="We couldn't transcribe this video right now. Please try again.")
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@api_router.post("/localize/export")
+async def export_video(
+    audio_base64: str = Form(...),
+    title: str = Form("VoiceLocal"),
+    keep_original: str = Form("false"),
+    video: Optional[UploadFile] = File(None),
+):
+    tmpdir = tempfile.mkdtemp(prefix="vlx_")
+    audio_path = os.path.join(tmpdir, "dub.mp3")
+    out_path = os.path.join(tmpdir, "localized.mp4")
+    try:
+        with open(audio_path, "wb") as f:
+            f.write(base64.b64decode(audio_base64))
+        if video is not None:
+            vid_path = os.path.join(tmpdir, video.filename or "in.mp4")
+            with open(vid_path, "wb") as f:
+                shutil.copyfileobj(video.file, f)
+            if keep_original == "true":
+                cmd = ["ffmpeg", "-y", "-i", vid_path, "-i", audio_path,
+                       "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=shortest[a]",
+                       "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-shortest", out_path]
+            else:
+                cmd = ["ffmpeg", "-y", "-i", vid_path, "-i", audio_path,
+                       "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                       "-c:a", "aac", "-shortest", out_path]
+        else:
+            # No source video (demo): render a branded video from the dubbed audio
+            cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=0x800000:s=1280x720",
+                   "-i", audio_path, "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-shortest", out_path]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
+        with open(out_path, "rb") as f:
+            data = f.read()
+        return Response(content=data, media_type="video/mp4",
+                        headers={"Content-Disposition": f'attachment; filename="{title}.mp4"'})
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Export ffmpeg error: {e.stderr[:500] if e.stderr else e}")
+        raise HTTPException(status_code=502, detail="We couldn't render the localized video. Please try again.")
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        raise HTTPException(status_code=502, detail="We couldn't render the localized video. Please try again.")
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 # ---------------- Projects ----------------
 @api_router.post("/projects")

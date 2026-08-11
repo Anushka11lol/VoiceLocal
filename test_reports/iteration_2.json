@@ -1,0 +1,21 @@
+{
+  "summary": "Iteration 2 — validated 4 new features (real Whisper STT, real ffmpeg export, multi-language batch, voice preview). Backend: 14/14 pytest passed including 3 new tests (transcribe returns ISO code 'en' not 'english' with real Whisper via TTS→ffmpeg-built sample mp4; export audio-only returns valid ftyp mp4; export video+audio muxed returns valid ftyp mp4). Regressions all green: languages=23, auth register/login/me/invalid, real Hindi→Bengali LLM translation (Bengali script confirmed), real TTS mp3 base64, projects CRUD + user isolation, analytics, protected-route 401s. Frontend Playwright on /localize?demo=1: voice-preview-btn transitions 'Loading voice…' → 'Preview voice' without error; selected target-lang-bn (pre-selected) + target-lang-ta, clicked generate-btn, processing-screen appeared, /results reached in ~150s. language-switcher renders with lang-switch-bn and lang-switch-ta; switching to ta updated transcript-tgt-0 from Bengali script to Tamil script (verified codepoint ranges 0x0980-0x09FF vs 0x0B80-0x0BFF). Localized-audio visible. download-srt and download-audio triggered downloads. download-video called /api/localize/export and downloaded a valid 280,944-byte mp4 with success toast 'Localized video downloaded!' — no error toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WHISPER_LANG_MAP normalization in /api/localize/transcribe correctly converts 'english' → 'en'. Non-mapped languages fall through to lowercased raw value which could still be a full name if Whisper returns an unexpected label — consider defaulting to first 2 chars or 'en'.",
+    "/api/localize/export accepts unlimited base64 payload — consider size validation to avoid memory spikes.",
+    "Frontend Localize.js stores full result (with embedded base64 audio) in sessionStorage; localStorage write is wrapped in try/catch (good) but could quickly exceed sessionStorage quota for many targets. Consider storing audios as blob URLs instead.",
+    "downloadBlob uses a.click() without appending to DOM — works in Chromium but may fail in Firefox for programmatic clicks; also no revokeObjectURL leak cleanup."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "demo@voicelocal.app / demo123",
+  "seed_data_creation": "Created transient TEST_ projects during pytest run; no manual seeds.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New tests build a real speech mp4 via TTS + ffmpeg lavfi color source inside the sample_mp4_with_speech session fixture. Full batch (2 targets) end-to-end takes ~2.5 min due to real LLM+TTS per segment (5 segments × 2 targets = 10 translate calls + 2 TTS calls). Video export via lavfi color background works when no source video is uploaded (demo case).",
+  "rca of the issue": "No blocking bugs."
+}

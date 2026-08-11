@@ -149,3 +149,79 @@ def test_analytics(s, demo_token):
 def test_analytics_requires_auth():
     r = requests.get(f"{API}/analytics")
     assert r.status_code == 401
+
+
+# ------- New: Transcribe (REAL Whisper) -------
+import subprocess, tempfile, shutil, os as _os
+
+@pytest.fixture(scope="session")
+def sample_mp4_with_speech(s):
+    """Build a short mp4 with real spoken audio by calling TTS + ffmpeg."""
+    tts_payload = {
+        "text": "Hello, this is a short test of the VoiceLocal transcription service.",
+        "voice": "female",
+        "language": "en",
+    }
+    r = s.post(f"{API}/localize/tts", json=tts_payload, timeout=120)
+    assert r.status_code == 200, r.text
+    mp3_b64 = r.json()["audio_base64"]
+    tmpdir = tempfile.mkdtemp(prefix="vltest_")
+    mp3 = _os.path.join(tmpdir, "a.mp3")
+    mp4 = _os.path.join(tmpdir, "clip.mp4")
+    with open(mp3, "wb") as f:
+        f.write(base64.b64decode(mp3_b64))
+    cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=320x240",
+           "-i", mp3, "-c:v", "libx264", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-shortest", mp4]
+    subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+    yield mp4
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_transcribe_returns_iso_language_code(sample_mp4_with_speech):
+    with open(sample_mp4_with_speech, "rb") as f:
+        files = {"file": ("clip.mp4", f, "video/mp4")}
+        r = requests.post(f"{API}/localize/transcribe", files=files, timeout=180)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert "segments" in j and isinstance(j["segments"], list) and len(j["segments"]) >= 1
+    seg = j["segments"][0]
+    assert "t" in seg and "text" in seg
+    assert isinstance(seg["t"], str)
+    # Language must be normalized to a short ISO code, not full name
+    lang = j["language"]
+    assert isinstance(lang, str)
+    assert 2 <= len(lang) <= 3, f"Expected ISO 2-3 letter code, got {lang!r}"
+    assert lang.lower() == lang
+    assert lang not in ("english", "hindi", "bengali")
+    assert "confidence" in j
+
+
+# ------- New: Export video (audio-only path) -------
+def test_export_audio_only_returns_mp4(s):
+    r = s.post(f"{API}/localize/tts",
+               json={"text": "Export test.", "voice": "female", "language": "en"}, timeout=120)
+    assert r.status_code == 200
+    audio_b64 = r.json()["audio_base64"]
+    data = {"audio_base64": audio_b64, "title": "TEST_Export", "keep_original": "false"}
+    r = requests.post(f"{API}/localize/export", data=data, timeout=180)
+    assert r.status_code == 200, r.text[:300]
+    assert r.headers.get("content-type", "").startswith("video/mp4")
+    content = r.content
+    # ISO BMFF: bytes 4-8 should be 'ftyp'
+    assert len(content) > 1000
+    assert content[4:8] == b"ftyp", f"Not a valid mp4, got header {content[:12]!r}"
+
+
+def test_export_with_video_and_audio(s, sample_mp4_with_speech):
+    r = s.post(f"{API}/localize/tts",
+               json={"text": "Dubbed track.", "voice": "male", "language": "en"}, timeout=120)
+    assert r.status_code == 200
+    audio_b64 = r.json()["audio_base64"]
+    with open(sample_mp4_with_speech, "rb") as vf:
+        files = {"video": ("in.mp4", vf, "video/mp4")}
+        data = {"audio_base64": audio_b64, "title": "TEST_Muxed", "keep_original": "false"}
+        r = requests.post(f"{API}/localize/export", data=data, files=files, timeout=240)
+    assert r.status_code == 200, r.text[:300]
+    assert r.headers.get("content-type", "").startswith("video/mp4")
+    assert r.content[4:8] == b"ftyp"

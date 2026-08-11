@@ -1,18 +1,18 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Play, Download, Captions, FileAudio, FileVideo, Check, Save } from "lucide-react";
+import { Play, Download, Captions, FileAudio, FileVideo, Check, Save, Loader2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { langName, langNative } from "../data/languages";
-import { buildSRT } from "../services/localizationService";
+import { buildSRT, localizationService } from "../services/localizationService";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Waveform } from "../components/Waveform";
 
-function download(filename, content, mime = "text/plain") {
+function downloadBlob(filename, blobOrDataUrl) {
   const a = document.createElement("a");
-  if (typeof content === "string" && content.startsWith("data:")) a.href = content;
-  else a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  if (typeof blobOrDataUrl === "string") a.href = blobOrDataUrl;
+  else a.href = URL.createObjectURL(blobOrDataUrl);
   a.download = filename;
   a.click();
 }
@@ -23,34 +23,57 @@ export default function Results() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [r, setR] = useState(null);
-  const [audioIdx, setAudioIdx] = useState(0);
+  const [active, setActive] = useState(null);
+  const [segIdx, setSegIdx] = useState(0);
   const [subSize, setSubSize] = useState("Medium");
   const [subPos, setSubPos] = useState("bottom");
   const [subStyle, setSubStyle] = useState("pill");
+  const [exporting, setExporting] = useState(false);
   const audioRef = useRef(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("vl_result") || localStorage.getItem("vl_last_result");
     if (!raw) { navigate("/localize"); return; }
-    setR(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    setR(parsed);
+    setActive(parsed.targets?.[0]);
   }, [navigate]);
 
-  if (!r) return null;
+  if (!r || !active) return null;
 
-  const currentSub = r.segments[audioIdx]?.translated || r.segments[0]?.translated;
+  const out = r.outputs[active];
+  const currentSub = out.segments[segIdx]?.translated || out.segments[0]?.translated;
 
   const saveProject = async () => {
     if (!user) { toast.info("Log in to save to your history."); navigate("/login"); return; }
     try {
       await api.post("/projects", {
-        title: r.title, source_language: r.source, target_languages: [r.target],
+        title: r.title, source_language: r.source, target_languages: r.targets,
         duration: r.duration, voice_type: r.voice, style: r.style, options: r.opts,
-        transcript_source: r.segments.map((s) => s.text).join(" "),
-        transcript_translated: r.fullTranslated,
+        transcript_source: r.sourceSegments.map((s) => s.text).join(" "),
+        transcript_translated: out.fullTranslated,
       });
       toast.success("Saved to your history!");
     } catch {
       toast.error("Couldn't save. Please log in and try again.");
+    }
+  };
+
+  const downloadVideo = async () => {
+    if (!out.audio) { toast.info("Enable dubbing to export a localized video."); return; }
+    setExporting(true);
+    const tid = toast.loading("Rendering localized video…");
+    try {
+      const audioBase64 = out.audio.split(",")[1];
+      const blob = await localizationService.exportVideo({
+        audioBase64, title: `${r.title}-${langName(active)}`, keepOriginal: r.opts?.originalAudio,
+      });
+      downloadBlob(`${r.title}-${langName(active)}.mp4`, blob);
+      toast.success("Localized video downloaded!", { id: tid });
+    } catch {
+      toast.error("We couldn't render the localized video. Please try again.", { id: tid });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -59,12 +82,24 @@ export default function Results() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="font-heading text-3xl font-bold text-slate-900">Your video is ready 🎉</h1>
-          <p className="text-slate-500 mt-1">{langName(r.source)} → {langName(r.target)} · {r.title}</p>
+          <p className="text-slate-500 mt-1">{langName(r.source)} → {r.targets.map(langName).join(", ")} · {r.title}</p>
         </div>
         <button onClick={saveProject} data-testid="save-project-btn" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors">
           <Save className="w-4 h-4" /> Save to History
         </button>
       </div>
+
+      {r.targets.length > 1 && (
+        <div className="flex flex-wrap gap-2 mt-5" data-testid="language-switcher">
+          <span className="text-sm text-slate-500 self-center mr-1">Language:</span>
+          {r.targets.map((c) => (
+            <button key={c} onClick={() => { setActive(c); setSegIdx(0); }} data-testid={`lang-switch-${c}`}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${active === c ? "maroon-gradient text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+              {langName(c)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-6 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6">
         <Tabs defaultValue="localized">
@@ -85,10 +120,10 @@ export default function Results() {
             <div className="rounded-xl bg-slate-900 aspect-video flex flex-col items-center justify-center relative overflow-hidden p-6">
               {r.previewUrl && <video src={r.previewUrl} muted className="absolute inset-0 w-full h-full object-cover opacity-40" />}
               <div className="relative z-10 text-center text-white">
-                <p className="text-xs uppercase tracking-wide text-pink-200">Localized · {langName(r.target)}</p>
+                <p className="text-xs uppercase tracking-wide text-pink-200">Localized · {langName(active)}</p>
                 <Waveform active bars={40} className="justify-center h-14 my-4" />
-                {r.audio ? (
-                  <audio ref={audioRef} src={r.audio} controls autoPlay className="mx-auto" data-testid="localized-audio" />
+                {out.audio ? (
+                  <audio ref={audioRef} src={out.audio} controls autoPlay className="mx-auto" data-testid="localized-audio" />
                 ) : <p className="text-sm text-white/70">Audio dubbing was disabled for this run.</p>}
                 <div className={`mt-4 inline-block px-3 py-1 rounded-full bg-black/60 ${SUB_SIZES[subSize]}`}>{currentSub}</div>
               </div>
@@ -120,17 +155,19 @@ export default function Results() {
 
         {/* Downloads */}
         <div className="flex flex-wrap gap-3 mt-6">
-          <button onClick={() => toast.success("Localized video export started (demo).")} data-testid="download-video" className="inline-flex items-center gap-2 maroon-gradient text-white rounded-full px-5 py-2.5 text-sm font-semibold hover:scale-[1.03] transition-transform"><FileVideo className="w-4 h-4" /> Download Video</button>
-          <button onClick={() => r.audio ? download(`${r.title}-${r.target}.mp3`, r.audio) : toast.info("Enable dubbing to download audio.")} data-testid="download-audio" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors"><FileAudio className="w-4 h-4" /> Download Audio</button>
-          <button onClick={() => download(`${r.title}-${r.target}.srt`, buildSRT(r.segments), "text/srt")} data-testid="download-srt" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors"><Captions className="w-4 h-4" /> Download Subtitles (.SRT)</button>
+          <button onClick={downloadVideo} disabled={exporting} data-testid="download-video" className="inline-flex items-center gap-2 maroon-gradient text-white rounded-full px-5 py-2.5 text-sm font-semibold hover:scale-[1.03] transition-transform disabled:opacity-70">
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileVideo className="w-4 h-4" />} {exporting ? "Rendering…" : "Download Video"}
+          </button>
+          <button onClick={() => out.audio ? downloadBlob(`${r.title}-${langName(active)}.mp3`, out.audio) : toast.info("Enable dubbing to download audio.")} data-testid="download-audio" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors"><FileAudio className="w-4 h-4" /> Download Audio</button>
+          <button onClick={() => downloadBlob(`${r.title}-${langName(active)}.srt`, "data:text/srt;charset=utf-8," + encodeURIComponent(buildSRT(out.segments)))} data-testid="download-srt" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors"><Captions className="w-4 h-4" /> Download Subtitles (.SRT)</button>
         </div>
       </div>
 
       {/* Summary */}
       <div className="grid sm:grid-cols-3 gap-4 mt-6">
         {[
-          ["Source", `${langName(r.source)} 🇮🇳`], ["Target", `${langName(r.target)} 🇮🇳`], ["Duration", r.duration],
-          ["Transcript", `${r.transcriptConfidence}% confidence`], ["Translation", "95% confidence"], ["Audio", r.audio ? "AI-generated" : "Disabled"],
+          ["Source", `${langName(r.source)} 🇮🇳`], ["Target", `${langName(active)} 🇮🇳`], ["Duration", r.duration],
+          ["Transcript", `${r.transcriptConfidence}% confidence`], ["Translation", `${out.confidence}% confidence`], ["Audio", out.audio ? "AI-generated" : "Disabled"],
         ].map(([k, v]) => (
           <div key={k} className="bg-white rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-400">{k}</p><p className="font-semibold text-slate-800 mt-0.5">{v}</p></div>
         ))}
@@ -142,17 +179,17 @@ export default function Results() {
         <div className="grid md:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-slate-400 uppercase mb-3">Original · {langNative(r.source)}</p>
-            {r.segments.map((s, i) => (
-              <button key={i} onClick={() => { setAudioIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${audioIdx === i ? "bg-pink-50" : ""}`}>
+            {out.segments.map((s, i) => (
+              <button key={i} onClick={() => { setSegIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.text}</span>
               </button>
             ))}
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <p className="text-xs font-semibold text-maroon-700 uppercase mb-3">Localized · {langNative(r.target)}</p>
-            {r.segments.map((s, i) => (
-              <button key={i} onClick={() => setAudioIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${audioIdx === i ? "bg-pink-50" : ""}`}>
+            <p className="text-xs font-semibold text-maroon-700 uppercase mb-3">Localized · {langNative(active)}</p>
+            {out.segments.map((s, i) => (
+              <button key={i} onClick={() => setSegIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.translated}</span>
               </button>
