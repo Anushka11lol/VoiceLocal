@@ -7,13 +7,28 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadF
 from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, jwt, bcrypt, tempfile, subprocess, base64, shutil
+import os, logging, uuid, jwt, bcrypt, tempfile, subprocess, base64, shutil, asyncio
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAITextToSpeech, OpenAISpeechToText
+
+
+def _resolve_ffmpeg() -> str:
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return shutil.which("ffmpeg") or "ffmpeg"
+
+
+FFMPEG = _resolve_ffmpeg()
+
+
+def _run_ffmpeg(cmd: list, timeout: int = 180):
+    return subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -227,10 +242,11 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
         with open(src_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
         # Extract compressed mono audio to stay under Whisper's 25MB limit
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", src_path, "-vn", "-ac", "1", "-ar", "16000",
+        await asyncio.to_thread(
+            _run_ffmpeg,
+            [FFMPEG, "-y", "-i", src_path, "-vn", "-ac", "1", "-ar", "16000",
              "-b:a", "64k", audio_path],
-            check=True, capture_output=True, timeout=120,
+            120,
         )
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
         kwargs = {"model": "whisper-1", "response_format": "verbose_json",
@@ -280,19 +296,19 @@ async def export_video(
             with open(vid_path, "wb") as f:
                 shutil.copyfileobj(video.file, f)
             if keep_original == "true":
-                cmd = ["ffmpeg", "-y", "-i", vid_path, "-i", audio_path,
+                cmd = [FFMPEG, "-y", "-i", vid_path, "-i", audio_path,
                        "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=shortest[a]",
                        "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-shortest", out_path]
             else:
-                cmd = ["ffmpeg", "-y", "-i", vid_path, "-i", audio_path,
+                cmd = [FFMPEG, "-y", "-i", vid_path, "-i", audio_path,
                        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
                        "-c:a", "aac", "-shortest", out_path]
         else:
             # No source video (demo): render a branded video from the dubbed audio
-            cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=0x800000:s=1280x720",
+            cmd = [FFMPEG, "-y", "-f", "lavfi", "-i", "color=c=0xb0455b:s=1280x720",
                    "-i", audio_path, "-c:v", "libx264", "-pix_fmt", "yuv420p",
                    "-c:a", "aac", "-shortest", out_path]
-        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
+        await asyncio.to_thread(_run_ffmpeg, cmd, 180)
         with open(out_path, "rb") as f:
             data = f.read()
         return Response(content=data, media_type="video/mp4",

@@ -170,7 +170,9 @@ def sample_mp4_with_speech(s):
     mp4 = _os.path.join(tmpdir, "clip.mp4")
     with open(mp3, "wb") as f:
         f.write(base64.b64decode(mp3_b64))
-    cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=320x240",
+    import imageio_ffmpeg
+    ffbin = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [ffbin, "-y", "-f", "lavfi", "-i", "color=c=black:s=320x240",
            "-i", mp3, "-c:v", "libx264", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-shortest", mp4]
     subprocess.run(cmd, check=True, capture_output=True, timeout=120)
