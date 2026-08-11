@@ -2,13 +2,10 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Play, Languages, Captions, Volume2, Zap, ShieldCheck, Users, GitBranch } from "lucide-react";
 import { Waveform } from "../components/Waveform";
 
-const HERO_IMG = "https://images.unsplash.com/photo-1568316280532-71d1baad0986?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjB2aWRlbyUyMGNyZWF0b3J8ZW58MHx8fHwxNzg2NDY1NDYxfDA&ixlib=rb-4.1.0&q=85";
-
 function DemoCard() {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_-20px_rgba(128,0,0,0.25)] p-5 w-full max-w-sm">
       <div className="rounded-xl bg-slate-900 aspect-video relative overflow-hidden">
-        <img src={HERO_IMG} alt="Indian creator" className="w-full h-full object-cover opacity-90" />
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center"><Play className="w-5 h-5 text-maroon-700 ml-0.5" /></div>
         </div>
