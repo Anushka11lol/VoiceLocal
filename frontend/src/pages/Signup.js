@@ -21,6 +21,7 @@ export default function Signup() {
     try {
       const { data } = await api.post("/auth/register", form);
       login(data.token, data.user);
+      sessionStorage.setItem("vl_greeting", "new");
       toast.success("Account created!");
       navigate("/dashboard");
     } catch (err) {

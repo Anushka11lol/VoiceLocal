@@ -15,10 +15,19 @@ const STATS = [
 export default function Dashboard() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
+  const [isNew, setIsNew] = useState(false);
 
   useEffect(() => {
     api.get("/projects").then(({ data }) => setProjects(data)).catch(() => {});
+    // Show "Welcome" for a just-created account, then flip to "Welcome back".
+    if (sessionStorage.getItem("vl_greeting") === "new") {
+      setIsNew(true);
+      sessionStorage.setItem("vl_greeting", "returning");
+    }
   }, []);
+
+  const firstName = user?.name?.split(" ")[0];
+  const greeting = isNew ? "Welcome" : "Welcome back";
 
   const recent = projects.length ? projects.slice(0, 4).map((p) => ({
     title: p.title, source: p.source_language, target: p.target_languages?.[0], duration: p.duration, status: p.status,
@@ -28,8 +37,8 @@ export default function Dashboard() {
     <div className="max-w-6xl mx-auto px-6 py-8 animate-fade-up">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-bold text-slate-900">Welcome back 👋</h1>
-          <p className="text-slate-500 mt-1">Localize your next video and reach more viewers{user ? `, ${user.name}` : ""}.</p>
+          <h1 className="font-heading text-3xl font-bold text-slate-900" data-testid="dashboard-greeting">{greeting}{firstName ? `, ${firstName}` : ""} 👋</h1>
+          <p className="text-slate-500 mt-1">{isNew ? "Your account is ready — localize your first video and reach more viewers." : "Localize your next video and reach more viewers."}</p>
         </div>
         <Link to="/localize" data-testid="new-localization-btn" className="inline-flex items-center gap-2 maroon-gradient text-white rounded-full px-6 py-3 font-semibold hover:scale-[1.03] transition-transform">
           <Plus className="w-4 h-4" /> New Localization

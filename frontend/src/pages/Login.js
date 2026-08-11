@@ -50,6 +50,7 @@ export default function Login() {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       login(data.token, data.user);
+      sessionStorage.setItem("vl_greeting", "returning");
       toast.success(`Welcome back, ${data.user.name}!`);
       navigate("/dashboard");
     } catch (err) {
