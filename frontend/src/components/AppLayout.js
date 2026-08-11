@@ -1,13 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { useA11y } from "../context/A11yContext";
 import { useAuth } from "../context/AuthContext";
 import { Menu, X, Accessibility } from "lucide-react";
 
+const PAGE_TITLES = {
+  "/": "Home",
+  "/how-it-works": "How It Works",
+  "/features": "Features",
+  "/demo": "Demo",
+  "/dashboard": "Dashboard",
+  "/localize": "Localize",
+  "/results": "Results",
+  "/history": "History",
+  "/analytics": "Analytics",
+  "/login": "Log in",
+  "/signup": "Sign up",
+};
+
 export function AppLayout({ children }) {
-  const { screenReader, setScreenReader } = useA11y();
+  const { screenReader, setScreenReader, announce } = useA11y();
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    const name = PAGE_TITLES[location.pathname] ||
+      (location.pathname.startsWith("/results") ? "Results" : "Page");
+    announce(`${name} page`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const toggleScreenReader = () => {
+    const next = !screenReader;
+    setScreenReader(next);
+    if (next) {
+      const name = PAGE_TITLES[location.pathname] || "Page";
+      setTimeout(() => announce(`Screen reader enabled. You are on the ${name} page.`), 60);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -43,7 +75,7 @@ export function AppLayout({ children }) {
 
           <div className="flex items-center gap-3 ml-auto">
             <button
-              onClick={() => setScreenReader(!screenReader)}
+              onClick={toggleScreenReader}
               aria-pressed={screenReader}
               data-testid="screen-reader-toggle"
               className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-semibold transition-colors ${

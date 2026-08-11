@@ -1,13 +1,12 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  Home, Workflow, Sparkles, PlayCircle, LayoutDashboard,
+  Home, Sparkles, PlayCircle, LayoutDashboard,
   Wand2, History, BarChart3, LogOut, Mic,
 } from "lucide-react";
 
 const NAV = [
   { to: "/", label: "Home", icon: Home, end: true },
-  { to: "/how-it-works", label: "How It Works", icon: Workflow },
   { to: "/features", label: "Features", icon: Sparkles },
   { to: "/demo", label: "Demo", icon: PlayCircle },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
