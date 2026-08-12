@@ -238,7 +238,8 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="Transcription service unavailable.")
     tmpdir = tempfile.mkdtemp(prefix="vl_")
-    src_path = os.path.join(tmpdir, file.filename or "input.mp4")
+    safe_filename = os.path.basename(file.filename or "input.mp4")
+    src_path = os.path.join(tmpdir, safe_filename)
     audio_path = os.path.join(tmpdir, "audio.mp3")
     try:
         with open(src_path, "wb") as f:
@@ -320,7 +321,7 @@ async def export_video(
         return Response(
             content=data,
             media_type="video/mp4",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.mp4"'})
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.mp4"'})
     except subprocess.CalledProcessError as e:
         logger.error(f"Export ffmpeg error: {e.stderr[:500] if e.stderr else e}")
         raise HTTPException(status_code=502, detail="We couldn't render the localized video. Please try again.")
@@ -376,9 +377,13 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.on_event("shutdown")
