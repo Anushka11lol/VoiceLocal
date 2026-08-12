@@ -184,7 +184,7 @@ async def me(user: dict = Depends(get_current_user)):
 
 @api_router.post("/auth/forgot-password")
 async def forgot_password(body: dict):
-    logger.info(f"Password reset requested for {body.get('email')}")
+    logger.info("Password reset requested")
     return {"message": "If an account exists for that email, a reset link has been sent."}
 
 # ---------------- Languages ----------------
@@ -220,8 +220,8 @@ async def translate(body: TranslateIn):
     try:
         translated = await _translate_one(src, tgt, body.text)
         return {"translated_text": translated, "source": src, "target": tgt, "confidence": 95}
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
+    except Exception:
+        logger.exception("Translation error")
         raise HTTPException(status_code=502, detail="We couldn't translate this text right now. Please try again.")
 
 
@@ -351,7 +351,8 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="Transcription service unavailable.")
     tmpdir = tempfile.mkdtemp(prefix="vl_")
-    src_path = os.path.join(tmpdir, file.filename or "input.mp4")
+    safe_filename = os.path.basename(file.filename or "input.mp4")
+    src_path = os.path.join(tmpdir, safe_filename)
     audio_path = os.path.join(tmpdir, "audio.mp3")
     try:
         with open(src_path, "wb") as f:
@@ -361,7 +362,7 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
             _run_ffmpeg,
             [FFMPEG, "-y", "-i", src_path, "-vn", "-ac", "1", "-ar", "16000",
              "-b:a", "64k", audio_path],
-            120,
+            300,
         )
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
         kwargs = {"model": "whisper-1", "response_format": "verbose_json",
@@ -407,7 +408,8 @@ async def export_video(
         with open(audio_path, "wb") as f:
             f.write(base64.b64decode(audio_base64))
         if video is not None:
-            vid_path = os.path.join(tmpdir, video.filename or "in.mp4")
+            safe_filename = os.path.basename(video.filename or "in.mp4")
+            vid_path = os.path.join(tmpdir, safe_filename)
             with open(vid_path, "wb") as f:
                 shutil.copyfileobj(video.file, f)
             if keep_original == "true":
@@ -426,8 +428,13 @@ async def export_video(
         await asyncio.to_thread(_run_ffmpeg, cmd, 180)
         with open(out_path, "rb") as f:
             data = f.read()
-        return Response(content=data, media_type="video/mp4",
-                        headers={"Content-Disposition": f'attachment; filename="{title}.mp4"'})
+
+        safe_title = os.path.basename(title).replace('"', "").replace("\r", "").replace("\n", "")
+
+        return Response(
+            content=data,
+            media_type="video/mp4",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.mp4"'})
     except subprocess.CalledProcessError as e:
         logger.error(f"Export ffmpeg error: {e.stderr[:500] if e.stderr else e}")
         raise HTTPException(status_code=502, detail="We couldn't render the localized video. Please try again.")
@@ -551,9 +558,13 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.on_event("shutdown")
