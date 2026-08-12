@@ -40,8 +40,15 @@ export const localizationService = {
     return data;
   },
 
+  async translateBatch({ texts, source_language, target_language }) {
+    const { data } = await api.post("/localize/translate_batch", {
+      texts, source_language, target_language,
+    }, { timeout: 180000 });
+    return data.translations; // string[]
+  },
+
   async generateVoice({ text, voice, language }) {
-    const { data } = await api.post("/localize/tts", { text, voice, language }, { timeout: 120000 });
+    const { data } = await api.post("/localize/tts", { text, voice, language }, { timeout: 240000 });
     return data; // { audio_base64, mime }
   },
 

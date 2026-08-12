@@ -7,7 +7,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadF
 from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, jwt, bcrypt, tempfile, subprocess, base64, shutil, asyncio
+import os, logging, uuid, jwt, bcrypt, tempfile, subprocess, base64, shutil, asyncio, re
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -192,6 +192,20 @@ async def get_languages():
 async def detect_language(body: dict):
     return {"language": body.get("hint", "hi"), "confidence": 97}
 
+
+async def _translate_one(src: str, tgt: str, text: str) -> str:
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"translate-{uuid.uuid4()}",
+        system_message=(f"You are an expert translator specialising in Indian languages. "
+                        f"Translate the given text from {src} to {tgt}. "
+                        f"Return ONLY the translated text in the native script of {tgt}, "
+                        f"preserving meaning, tone and natural conversational flow. No notes, no quotes.")
+    ).with_model("openai", "gpt-5.4")
+    resp = await chat.send_message(UserMessage(text=text))
+    return resp.strip() if isinstance(resp, str) else str(resp).strip()
+
+
 @api_router.post("/localize/translate")
 async def translate(body: TranslateIn):
     src = LANG_BY_CODE.get(body.source_language, {}).get("name", body.source_language)
@@ -199,22 +213,91 @@ async def translate(body: TranslateIn):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="Translation service unavailable.")
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"translate-{uuid.uuid4()}",
-            system_message=(f"You are an expert translator specialising in Indian languages. "
-                            f"Translate the given text from {src} to {tgt}. "
-                            f"Return ONLY the translated text in the native script of {tgt}, "
-                            f"preserving meaning, tone and natural conversational flow. No notes, no quotes.")
-        ).with_model("openai", "gpt-5.4")
-        resp = await chat.send_message(UserMessage(text=body.text))
-        translated = resp.strip() if isinstance(resp, str) else str(resp).strip()
+        translated = await _translate_one(src, tgt, body.text)
         return {"translated_text": translated, "source": src, "target": tgt, "confidence": 95}
     except Exception as e:
         logger.error(f"Translation error: {e}")
         raise HTTPException(status_code=502, detail="We couldn't translate this text right now. Please try again.")
 
+
+class TranslateBatchIn(BaseModel):
+    texts: List[str]
+    source_language: str
+    target_language: str
+
+
+@api_router.post("/localize/translate_batch")
+async def translate_batch(body: TranslateBatchIn):
+    src = LANG_BY_CODE.get(body.source_language, {}).get("name", body.source_language)
+    tgt = LANG_BY_CODE.get(body.target_language, {}).get("name", body.target_language)
+    texts = body.texts or []
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Translation service unavailable.")
+    if not texts:
+        return {"translations": []}
+    try:
+        # Attempt a single batched call for speed (handles long transcripts).
+        numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"translate-batch-{uuid.uuid4()}",
+            system_message=(
+                f"You are an expert translator specialising in Indian languages. "
+                f"Translate EACH numbered line from {src} to {tgt}. "
+                f"Return EXACTLY {len(texts)} lines. Each output line must start with the same "
+                f"line number, a period, a space, then ONLY the {tgt} translation in native script. "
+                f"Preserve order and count. Do not merge, split, add or drop lines. No notes."
+            ),
+        ).with_model("openai", "gpt-5.4")
+        resp = await chat.send_message(UserMessage(text=numbered))
+        raw = resp if isinstance(resp, str) else str(resp)
+        parsed = {}
+        for line in raw.splitlines():
+            m = re.match(r"^\s*(\d+)[.)]\s*(.*)$", line)
+            if m:
+                parsed[int(m.group(1))] = m.group(2).strip()
+        translations = [parsed.get(i + 1, "") for i in range(len(texts))]
+        if all(translations):
+            return {"translations": translations}
+
+        # Fallback: translate each line individually with limited concurrency.
+        sem = asyncio.Semaphore(4)
+
+        async def _one(t):
+            async with sem:
+                return await _translate_one(src, tgt, t)
+
+        translations = await asyncio.gather(*[_one(t) for t in texts])
+        return {"translations": list(translations)}
+    except Exception as e:
+        logger.error(f"Batch translation error: {e}")
+        raise HTTPException(status_code=502, detail="We couldn't translate this transcript right now. Please try again.")
+
+
 VOICE_MAP = {"female": "nova", "male": "onyx", "neutral": "alloy"}
+
+
+def _split_for_tts(text: str, limit: int = 3800) -> list:
+    parts = re.split(r"(?<=[.!?।॥])\s+", text.strip())
+    chunks, cur = [], ""
+    for p in parts:
+        if not p:
+            continue
+        if len(cur) + len(p) + 1 <= limit:
+            cur = (cur + " " + p).strip()
+        else:
+            if cur:
+                chunks.append(cur)
+            if len(p) <= limit:
+                cur = p
+            else:
+                for i in range(0, len(p), limit):
+                    chunks.append(p[i:i + limit])
+                cur = ""
+    if cur:
+        chunks.append(cur)
+    return chunks or [text[:limit]]
+
 
 @api_router.post("/localize/tts")
 async def text_to_speech(body: TTSIn):
@@ -223,9 +306,36 @@ async def text_to_speech(body: TTSIn):
     try:
         tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
         voice = VOICE_MAP.get(body.voice, "nova")
-        text = body.text[:4000]
-        audio_b64 = await tts.generate_speech_base64(text=text, model="tts-1-hd", voice=voice)
-        return {"audio_base64": audio_b64, "mime": "audio/mp3"}
+        chunks = _split_for_tts(body.text)
+        if len(chunks) == 1:
+            audio_b64 = await tts.generate_speech_base64(text=chunks[0], model="tts-1-hd", voice=voice)
+            return {"audio_base64": audio_b64, "mime": "audio/mp3"}
+
+        # Long text: synthesise each chunk then concatenate the audio with ffmpeg.
+        tmpdir = tempfile.mkdtemp(prefix="vltts_")
+        try:
+            paths = []
+            for i, ch in enumerate(chunks):
+                b64 = await tts.generate_speech_base64(text=ch, model="tts-1-hd", voice=voice)
+                p = os.path.join(tmpdir, f"{i}.mp3")
+                with open(p, "wb") as f:
+                    f.write(base64.b64decode(b64))
+                paths.append(p)
+            list_path = os.path.join(tmpdir, "list.txt")
+            with open(list_path, "w") as f:
+                for p in paths:
+                    f.write(f"file '{p}'\n")
+            out_path = os.path.join(tmpdir, "out.mp3")
+            await asyncio.to_thread(
+                _run_ffmpeg,
+                [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", out_path],
+                180,
+            )
+            with open(out_path, "rb") as f:
+                combined = base64.b64encode(f.read()).decode()
+            return {"audio_base64": combined, "mime": "audio/mp3"}
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=502, detail="We couldn't generate the localized voice right now. Please try again.")
