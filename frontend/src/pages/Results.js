@@ -84,9 +84,15 @@ export default function Results() {
           <h1 className="font-heading text-3xl font-bold text-slate-900">Your video is ready 🎉</h1>
           <p className="text-slate-500 mt-1">{langName(r.source)} → {r.targets.map(langName).join(", ")} · {r.title}</p>
         </div>
-        <button onClick={saveProject} data-testid="save-project-btn" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors">
-          <Save className="w-4 h-4" /> Save to History
-        </button>
+        {r.saved ? (
+          <span data-testid="saved-indicator" className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-full px-5 py-2.5 text-sm font-semibold">
+            <Check className="w-4 h-4" /> Saved to History
+          </span>
+        ) : (
+          <button onClick={saveProject} data-testid="save-project-btn" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors">
+            <Save className="w-4 h-4" /> Save to History
+          </button>
+        )}
       </div>
 
       {r.targets.length > 1 && (
@@ -167,7 +173,7 @@ export default function Results() {
       <div className="grid sm:grid-cols-3 gap-4 mt-6">
         {[
           ["Source", `${langName(r.source)} 🇮🇳`], ["Target", `${langName(active)} 🇮🇳`], ["Duration", r.duration],
-          ["Transcript", `${r.transcriptConfidence}% confidence`], ["Translation", `${out.confidence}% confidence`], ["Audio", out.audio ? "AI-generated" : "Disabled"],
+          ["Audio", out.audio ? "AI-generated" : "Disabled"],
         ].map(([k, v]) => (
           <div key={k} className="bg-white rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-400">{k}</p><p className="font-semibold text-slate-800 mt-0.5">{v}</p></div>
         ))}

@@ -1,0 +1,22 @@
+{
+  "summary": "Verified 3 targeted changes: (1) Auto-Detect removed from source-language dropdown (23 real languages only, no 'auto' value/text, no data-testid 'detected-language' anywhere on Localize or Results); (2) Confidence text completely removed from Results page (searched full body text, 'confidence' substring absent both for logged-in and guest flows); (3) Stats auto-update on signed-in localization — before demo run: stats={videos:7, languages:13, minutes:5, reach:+73%}, projects=7; after auto-save: stats={videos:8, languages:14, minutes:6, reach:+80%}, projects=8 (videos +1, languages +1, projects +1 exactly as expected). Results page correctly shows data-testid='saved-indicator' ('Saved to History' chip) and OMITS 'save-project-btn' when signed in. Guest (logged-out) demo pipeline still reaches /results, save-project-btn IS shown, saved-indicator absent, no crash, no confidence text. Regression: full demo pipeline /demo->run-demo-btn->/localize?demo=1->generate-btn->processing-screen->/results works; Original/Localized/Subtitles tabs, localized-audio, download-video/audio/srt, transcript-src-0/transcript-tgt-0 all present; Bengali script visible in subtitle overlay. Backend pytest: 17/17 PASS (languages=23, auth incl. 401s, translate hi->bn returns Bengali codepoints, TTS Bengali base64, projects CRUD+isolation, /api/stats and /api/analytics per-user zero-state + growth-with-projects, transcribe returns 2-3 letter ISO code with segments, export audio-only + muxed both return valid ftyp mp4).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pre-existing dev-only console warning persists: '<span> cannot be a child of <option>' inside Localize.js <select>. Injected by dev-time source-editor instrumentation (x-ve-dynamic span wrapping {l.name}). Cosmetic only, unchanged from prior iterations, not a regression of this round."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% of targeted flows"},
+  "test_credentials": "demo@voicelocal.app / demo123 (has projects; count drifts as tests add more). Fresh users registered inline via /api/auth/register (TEST_<uuid>@example.com / secret123).",
+  "seed_data_creation": "Auto-save from demo localization added 1 project on demo account (videos 7->8, projects 7->8). Backend pytest also created TEST_ projects for isolation/growth tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auto-save behavior confirmed working end-to-end via /api/projects on completion when user is signed in. Guest flow does not save. When measuring stat deltas on demo account, capture before/after within same session — prior runs and pytest add projects. localStorage token key is 'vl_token'.",
+  "rca of the issue": "N/A — no bugs found."
+}

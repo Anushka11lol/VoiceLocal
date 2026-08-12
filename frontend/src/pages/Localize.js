@@ -5,6 +5,8 @@ import { UploadCloud, X, Check, Film, Info, Sparkles, Volume2 } from "lucide-rea
 import { LANGUAGES, langName, langNative, DEMO_TRANSCRIPT, VOICE_TYPES, VOICE_STYLES } from "../data/languages";
 import { localizationService, setVideoFile } from "../services/localizationService";
 import { useA11y } from "../context/A11yContext";
+import { useAuth } from "../context/AuthContext";
+import { api } from "../lib/api";
 import { Waveform } from "../components/Waveform";
 
 const STEPS = ["Upload", "Analyze", "Translate", "Dub", "Export"];
@@ -80,12 +82,12 @@ export default function Localize() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { announce } = useA11y();
+  const { user } = useAuth();
   const fileRef = useRef(null);
 
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [source, setSource] = useState("auto");
-  const [detected, setDetected] = useState(null);
+  const [source, setSource] = useState("en");
   const [targets, setTargets] = useState([]);
   const [voice, setVoice] = useState("female");
   const [style, setStyle] = useState("natural");
@@ -103,7 +105,7 @@ export default function Localize() {
   const playPreview = async () => {
     setPreviewing(true);
     try {
-      const lang = targets[0] || (source === "auto" ? detected?.language : source) || "en";
+      const lang = targets[0] || source || "en";
       const url = await localizationService.previewVoice({ voice, language: lang });
       if (previewAudioRef.current) {
         previewAudioRef.current.src = url;
@@ -130,8 +132,6 @@ export default function Localize() {
     setFile(f);
     setVideoFile(f);
     setPreviewUrl(URL.createObjectURL(f));
-    setSource("auto");
-    localizationService.detectLanguage("hi").then((d) => setDetected(d));
   }, []);
 
   // Demo prefill
@@ -140,7 +140,6 @@ export default function Localize() {
       setFile({ name: "ISRO_Explained_demo.mp4", size: 8_400_000, demo: true, duration: "00:42" });
       setSource("hi");
       setTargets(["bn"]);
-      setDetected({ language: "hi", confidence: 97 });
     }
   }, [isDemo]); // eslint-disable-line
 
@@ -156,12 +155,11 @@ export default function Localize() {
     const started = Date.now();
     try {
       // 1) Source transcript — real STT for uploaded files, demo transcript otherwise
-      let src = source === "auto" ? (detected?.language || "hi") : source;
+      const src = source;
       let sourceSegments = DEMO_TRANSCRIPT;
       if (!file.demo) {
         const tr = await localizationService.transcribeVideo({ file, language: source });
         if (tr.segments?.length) sourceSegments = tr.segments;
-        if (source === "auto" && tr.language) src = tr.language;
       }
 
       // 2) For each target language: translate every segment + generate dubbed voice
@@ -179,17 +177,35 @@ export default function Localize() {
           const a = await localizationService.generateVoice({ text: fullTranslated, voice, language: target });
           audio = `data:${a.mime};base64,${a.audio_base64}`;
         }
-        outputs[target] = { segments, fullTranslated, audio, confidence: translations[0]?.confidence || 95 };
+        outputs[target] = { segments, fullTranslated, audio };
+      }
+
+      const title = file.demo ? "ISRO Explained" : file.name.replace(/\.[^.]+$/, "");
+      const duration = file.duration || "00:42";
+
+      // 3) Persist the project so statistics update on every localization (when signed in)
+      let saved = false;
+      if (user) {
+        try {
+          await api.post("/projects", {
+            title, source_language: src, target_languages: targets, duration,
+            voice_type: voice, style, options: opts,
+            transcript_source: sourceSegments.map((s) => s.text).join(" "),
+            transcript_translated: outputs[targets[0]].fullTranslated,
+          });
+          saved = true;
+        } catch (err) {
+          console.warn("Auto-save failed:", err);
+        }
       }
 
       const result = {
-        title: file.demo ? "ISRO Explained" : file.name.replace(/\.[^.]+$/, ""),
-        source: src, targets, duration: file.duration || "00:42",
+        title, source: src, targets, duration,
         voice, style, opts, previewUrl: file.demo ? null : previewUrl,
         hasVideoFile: !file.demo,
         sourceSegments,
         outputs,
-        transcriptConfidence: 98,
+        saved,
       };
       const serialized = JSON.stringify(result);
       sessionStorage.setItem("vl_result", serialized);
@@ -260,19 +276,15 @@ export default function Localize() {
             <h2 className="font-heading text-lg font-semibold text-slate-900 mb-3">2. Source language</h2>
             <select value={source} onChange={(e) => setSource(e.target.value)} data-testid="source-language-select"
               className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-pink-200 outline-none">
-              <option value="auto">Auto Detect</option>
               {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.name} — {l.native}</option>)}
             </select>
-            {source === "auto" && detected && (
-              <p className="text-sm text-slate-600 mt-2" data-testid="detected-language">Detected language: <b>{langName(detected.language)} 🇮🇳</b> · Confidence: {detected.confidence}%</p>
-            )}
           </section>
 
           {/* Target languages */}
           <section className="mt-8">
             <h2 className="font-heading text-lg font-semibold text-slate-900 mb-3">3. Target languages</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
-              {LANGUAGES.filter((l) => l.code !== (source === "auto" ? detected?.language : source)).map((l) => {
+              {LANGUAGES.filter((l) => l.code !== source).map((l) => {
                 const on = targets.includes(l.code);
                 return (
                   <button key={l.code} onClick={() => toggleTarget(l.code)} data-testid={`target-lang-${l.code}`}
