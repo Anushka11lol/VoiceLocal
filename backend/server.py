@@ -179,7 +179,7 @@ async def me(user: dict = Depends(get_current_user)):
 
 @api_router.post("/auth/forgot-password")
 async def forgot_password(body: dict):
-    logger.info(f"Password reset requested for {body.get('email')}")
+    logger.info("Password reset requested")
     return {"message": "If an account exists for that email, a reset link has been sent."}
 
 # ---------------- Languages ----------------
@@ -190,8 +190,10 @@ async def get_languages():
 # ---------------- AI pipeline ----------------
 @api_router.post("/localize/detect")
 async def detect_language(body: dict):
-    return {"language": body.get("hint", "hi"), "confidence": 97}
-
+    return {
+        "language": body.get("hint", "en"),
+        "confidence": None
+    }
 @api_router.post("/localize/translate")
 async def translate(body: TranslateIn):
     src = LANG_BY_CODE.get(body.source_language, {}).get("name", body.source_language)
@@ -204,14 +206,14 @@ async def translate(body: TranslateIn):
             session_id=f"translate-{uuid.uuid4()}",
             system_message=(f"You are an expert translator specialising in Indian languages. "
                             f"Translate the given text from {src} to {tgt}. "
-                            f"Return ONLY the translated text in the native script of {tgt}, "
+                            f"Return ONLY the translated text in the native script used for {tgt}, "
                             f"preserving meaning, tone and natural conversational flow. No notes, no quotes.")
         ).with_model("openai", "gpt-5.4")
         resp = await chat.send_message(UserMessage(text=body.text))
         translated = resp.strip() if isinstance(resp, str) else str(resp).strip()
         return {"translated_text": translated, "source": src, "target": tgt, "confidence": 95}
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
+    except Exception:
+        logger.exception("Translation error")
         raise HTTPException(status_code=502, detail="We couldn't translate this text right now. Please try again.")
 
 VOICE_MAP = {"female": "nova", "male": "onyx", "neutral": "alloy"}
@@ -226,8 +228,8 @@ async def text_to_speech(body: TTSIn):
         text = body.text[:4000]
         audio_b64 = await tts.generate_speech_base64(text=text, model="tts-1-hd", voice=voice)
         return {"audio_base64": audio_b64, "mime": "audio/mp3"}
-    except Exception as e:
-        logger.error(f"TTS error: {e}")
+    except Exception:
+        logger.exception("TTS error")
         raise HTTPException(status_code=502, detail="We couldn't generate the localized voice right now. Please try again.")
 
 
@@ -246,7 +248,7 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
             _run_ffmpeg,
             [FFMPEG, "-y", "-i", src_path, "-vn", "-ac", "1", "-ar", "16000",
              "-b:a", "64k", audio_path],
-            120,
+            300,
         )
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
         kwargs = {"model": "whisper-1", "response_format": "verbose_json",
@@ -292,7 +294,8 @@ async def export_video(
         with open(audio_path, "wb") as f:
             f.write(base64.b64decode(audio_base64))
         if video is not None:
-            vid_path = os.path.join(tmpdir, video.filename or "in.mp4")
+            safe_filename = os.path.basename(video.filename or "in.mp4")
+            vid_path = os.path.join(tmpdir, safe_filename)
             with open(vid_path, "wb") as f:
                 shutil.copyfileobj(video.file, f)
             if keep_original == "true":
@@ -311,8 +314,13 @@ async def export_video(
         await asyncio.to_thread(_run_ffmpeg, cmd, 180)
         with open(out_path, "rb") as f:
             data = f.read()
-        return Response(content=data, media_type="video/mp4",
-                        headers={"Content-Disposition": f'attachment; filename="{title}.mp4"'})
+
+        safe_title = os.path.basename(title).replace('"', "").replace("\r", "").replace("\n", "")
+
+        return Response(
+            content=data,
+            media_type="video/mp4",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.mp4"'})
     except subprocess.CalledProcessError as e:
         logger.error(f"Export ffmpeg error: {e.stderr[:500] if e.stderr else e}")
         raise HTTPException(status_code=502, detail="We couldn't render the localized video. Please try again.")
