@@ -125,8 +125,8 @@ export default function Localize() {
       toast.error("Unsupported file. Please use MP4, MOV or WebM.");
       return;
     }
-    if (f.size > 500 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 500 MB.");
+    if (f.size > 200 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 200 MB.");
       return;
     }
     setFile(f);
@@ -144,7 +144,7 @@ export default function Localize() {
   }, [isDemo]); // eslint-disable-line
 
   const toggleTarget = (code) =>
-    setTargets((t) => (t.includes(code) ? t.filter((c) => c !== code) : [...t, code]));
+    setTargets((t) => (t.includes(code) ? [] : [code]));
 
   const runPipeline = async () => {
     if (!file) { toast.error("Please upload or select a video first."); return; }
@@ -162,15 +162,13 @@ export default function Localize() {
         if (tr.segments?.length) sourceSegments = tr.segments;
       }
 
-      // 2) For each target language: translate every segment + generate dubbed voice
+      // 2) For each target language: translate the whole transcript in one batched call + dub
       const outputs = {};
       for (const target of targets) {
-        const translations = await Promise.all(
-          sourceSegments.map((seg) =>
-            localizationService.translateTranscript({ text: seg.text, source_language: src, target_language: target })
-          )
-        );
-        const segments = sourceSegments.map((seg, i) => ({ ...seg, translated: translations[i].translated_text }));
+        const translated = await localizationService.translateBatch({
+          texts: sourceSegments.map((s) => s.text), source_language: src, target_language: target,
+        });
+        const segments = sourceSegments.map((seg, i) => ({ ...seg, translated: translated[i] || "" }));
         const fullTranslated = segments.map((s) => s.translated).join(" ");
         let audio = null;
         if (opts.dubbing) {
@@ -220,7 +218,7 @@ export default function Localize() {
       }, wait);
     } catch (err) {
       setProcessing(false);
-      toast.error(err.response?.data?.detail || "We couldn't process this video. Please try a shorter MP4 file.");
+      toast.error(err.response?.data?.detail || "We couldn't finish localizing this video. Please try again.");
     }
   };
 
@@ -252,7 +250,7 @@ export default function Localize() {
             <div className="w-14 h-14 mx-auto rounded-full bg-white flex items-center justify-center shadow-sm"><UploadCloud className="w-6 h-6 text-maroon-700" /></div>
             <p className="font-semibold text-slate-800 mt-4">Drag & drop your video here</p>
             <p className="text-slate-500 text-sm mt-1">or <span className="text-maroon-700 font-medium">Browse Files</span></p>
-            <p className="text-xs text-slate-400 mt-3">MP4, MOV, WebM · Maximum file size: 500 MB</p>
+            <p className="text-xs text-slate-400 mt-3">MP4, MOV, WebM · Maximum file size: 200 MB</p>
             <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" data-testid="upload-input" onChange={(e) => handleFile(e.target.files?.[0])} />
           </div>
         ) : (
@@ -282,7 +280,7 @@ export default function Localize() {
 
           {/* Target languages */}
           <section className="mt-8">
-            <h2 className="font-heading text-lg font-semibold text-slate-900 mb-3">3. Target languages</h2>
+            <h2 className="font-heading text-lg font-semibold text-slate-900 mb-3">3. Target language</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
               {LANGUAGES.filter((l) => l.code !== source).map((l) => {
                 const on = targets.includes(l.code);

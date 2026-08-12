@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 7 targeted validation of Cloudflare-overload fixes and UX changes. All new-feature tests (19/19) + regression (17/17) PASS. Backend: (a) POST /api/localize/translate_batch preserves count & order for 6 EN->TA texts and returns Tamil script; empty texts -> {translations:[]}; returns native script for bn/te/ml/gu/pa/ur; also succeeds for rarer 'sat','brx','mni'. (b) POST /api/localize/tts with ~6300-char English text returns single mp3 base64 (>20KB) — no 502; chunk+concat via bundled ffmpeg works. (c) TTS succeeds for ta/te/ml/gu/pa/ur short native-script inputs. (d) Per-user stats persistence: fresh user A stats=zeros -> after creating project videos=1/languages=1; fresh user B still zeros (isolated); logging user A back in via /api/auth/login returns fresh token and /api/stats still shows videos=1/languages=1 (data intact across logout/login). Regression: /api/languages (23), auth incl. 401s, translate hi->bn returns Bengali script, TTS Bengali, projects CRUD+isolation, /api/analytics per-user zero + growth, transcribe returns ISO 2-3-letter code, export audio-only and muxed both return valid ftyp mp4. Frontend (/localize?demo=1): heading is '3. Target language' (singular). Single-select semantics confirmed — initial demo pre-selects only 'bn'; clicking ta->replaces to only ta; clicking mr->replaces to only mr; clicking te->replaces to only te; clicking te again->deselects (empty). At most one target-lang-<code> card carries the selected 'border-maroon-700 bg-pink-50' style at any time. Upload area copy reads 'MP4, MOV, WebM · Maximum file size: 200 MB' (verified on empty-file view). End-to-end demo pipeline /demo -> run-demo-btn -> /localize?demo=1 -> generate-btn -> processing-screen -> /results completes; localized-audio, transcript-src-0, transcript-tgt-0, download-video/audio/srt all present. Bengali script rendered in transcript panel and subtitle overlay.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter7_new.xml",
+    "/app/test_reports/pytest/iter7_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "translate_batch fallback path parses only lines matching '^\\d+[.)] ...' — if the LLM returns a non-numbered format on the first try, empty strings trigger the sequential fallback (correct behavior, but worth noting). Concurrency 4 keeps this within provider quota.",
+    "_split_for_tts uses a hard char limit=3800 and falls back to hard-cut for pathological >3800-char single 'sentence' — fine for real transcripts but could cause a mid-word break in rare inputs.",
+    "Pre-existing dev-only console warning '<span> cannot be a child of <option>' from source-editor instrumentation persists (cosmetic)."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100% (36/36 across new + regression)", "frontend": "100% of targeted flows"},
+  "test_credentials": "demo@voicelocal.app / demo123 (has projects). Fresh users registered inline as TEST_<uuid>@example.com / secret123.",
+  "seed_data_creation": "Persistence & growth tests create a small number of TEST_ projects on ephemeral throwaway users. No writes on demo account beyond what the E2E demo pipeline auto-saves when signed in (not signed in during this run's demo E2E).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Batch translate endpoint = POST /api/localize/translate_batch {texts:[], source_language, target_language} -> {translations:[]} (same length/order). Long-text TTS is chunked at 3800 chars and concatenated via bundled imageio-ffmpeg. Selected target card uses className containing 'border-maroon-700'. Source language filter hides its own code from the target grid — pick codes other than the current source. Demo mode pre-selects target 'bn' (source 'hi').",
+  "rca of the issue": "N/A — no bugs found this round."
+}
