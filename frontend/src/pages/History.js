@@ -13,7 +13,7 @@ export default function History() {
   }, []);
 
   const list = (projects || []).map((p) => ({
-    title: p.title, source: p.source_language, target: p.target_languages?.[0], duration: p.duration, status: p.status, date: p.created_at?.slice(0, 10),
+    id: p.id, title: p.title, source: p.source_language, target: p.target_languages?.[0], duration: p.duration, status: p.status, date: p.created_at?.slice(0, 10),
   }));
 
   return (
@@ -38,7 +38,7 @@ export default function History() {
       ) : (
         <div className="grid sm:grid-cols-2 gap-5 mt-8">
           {list.map((p, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex gap-4" data-testid={`history-card-${i}`}>
+            <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex gap-4" data-testid={`history-card-${i}`}>
               <div className="w-28 h-20 rounded-lg bg-slate-900 flex items-center justify-center shrink-0"><Film className="w-6 h-6 text-white/60" /></div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-slate-800 truncate">{p.title}</p>

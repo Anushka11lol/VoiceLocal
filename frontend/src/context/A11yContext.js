@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 const A11yContext = createContext(null);
 
@@ -21,30 +21,30 @@ export function A11yProvider({ children }) {
     }
   }, [screenReader]);
 
-  const speak = (msg) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(msg);
-      u.rate = 1;
-      u.lang = "en-US";
-      window.speechSynthesis.speak(u);
-    } catch {
-      /* speech synthesis unavailable */
-    }
-  };
-
-  const announce = (msg) => {
-    if (!srRef.current || !msg) return;
-    // Update aria-live region for assistive tech...
-    setAnnouncement("");
-    setTimeout(() => setAnnouncement(msg), 50);
-    // ...and speak aloud so the toggle is audibly useful in-browser.
-    speak(msg);
-  };
+  const value = useMemo(() => {
+    const speak = (msg) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(msg);
+        u.rate = 1;
+        u.lang = "en-US";
+        window.speechSynthesis.speak(u);
+      } catch (err) {
+        console.warn("Speech synthesis unavailable:", err);
+      }
+    };
+    const announce = (msg) => {
+      if (!srRef.current || !msg) return;
+      setAnnouncement("");
+      setTimeout(() => setAnnouncement(msg), 50);
+      speak(msg);
+    };
+    return { screenReader, setScreenReader, announce };
+  }, [screenReader]);
 
   return (
-    <A11yContext.Provider value={{ screenReader, setScreenReader, announce }}>
+    <A11yContext.Provider value={value}>
       {children}
       <div aria-live="assertive" role="status" className="sr-only" data-testid="sr-live-region">
         {announcement}

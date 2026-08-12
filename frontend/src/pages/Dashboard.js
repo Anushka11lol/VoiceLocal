@@ -32,7 +32,7 @@ export default function Dashboard() {
   const greeting = isNew ? "Welcome" : "Welcome back";
 
   const recent = projects.slice(0, 4).map((p) => ({
-    title: p.title, source: p.source_language, target: p.target_languages?.[0], duration: p.duration, status: p.status,
+    id: p.id, title: p.title, source: p.source_language, target: p.target_languages?.[0], duration: p.duration, status: p.status,
   }));
 
   return (
@@ -72,7 +72,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {recent.map((p, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all overflow-hidden" data-testid={`dashboard-project-${i}`}>
+            <div key={p.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all overflow-hidden" data-testid={`dashboard-project-${i}`}>
               <div className="aspect-video bg-slate-900 flex items-center justify-center"><Film className="w-6 h-6 text-white/60" /></div>
               <div className="p-4">
                 <p className="font-semibold text-slate-800 text-sm truncate">{p.title}</p>

@@ -193,7 +193,7 @@ export default function Localize() {
       };
       const serialized = JSON.stringify(result);
       sessionStorage.setItem("vl_result", serialized);
-      try { localStorage.setItem("vl_last_result", serialized); } catch { /* audio too large for localStorage */ }
+      try { localStorage.setItem("vl_last_result", serialized); } catch (err) { console.warn("Result too large to cache locally:", err); }
 
       const elapsed = Date.now() - started;
       const wait = Math.max(0, 6500 - elapsed);

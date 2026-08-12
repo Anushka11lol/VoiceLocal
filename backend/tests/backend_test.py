@@ -8,8 +8,8 @@ import requests
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://localize-video-1.preview.emergentagent.com').rstrip('/')
 API = f"{BASE_URL}/api"
 
-DEMO_EMAIL = "demo@voicelocal.app"
-DEMO_PASSWORD = "demo123"
+DEMO_EMAIL = os.environ.get("VL_TEST_EMAIL", "demo@voicelocal.app")
+DEMO_PASSWORD = os.environ.get("VL_TEST_PASSWORD", "demo123")
 
 
 @pytest.fixture(scope="session")

@@ -180,7 +180,7 @@ export default function Results() {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-slate-400 uppercase mb-3">Original · {langNative(r.source)}</p>
             {out.segments.map((s, i) => (
-              <button key={i} onClick={() => { setSegIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
+              <button key={`src-${s.t}-${i}`} onClick={() => { setSegIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.text}</span>
               </button>
@@ -189,7 +189,7 @@ export default function Results() {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-maroon-700 uppercase mb-3">Localized · {langNative(active)}</p>
             {out.segments.map((s, i) => (
-              <button key={i} onClick={() => setSegIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
+              <button key={`tgt-${s.t}-${i}`} onClick={() => setSegIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.translated}</span>
               </button>

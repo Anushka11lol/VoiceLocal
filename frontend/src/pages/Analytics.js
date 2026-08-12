@@ -5,6 +5,8 @@ import { api } from "../lib/api";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const COLORS = ["#b0455b", "#FF66B2", "#3B82F6", "#F59E0B"];
+const AXIS_TICK = { fontSize: 12 };
+const BAR_RADIUS = [6, 6, 0, 0];
 
 const EMPTY = { stats: { videos: 0 }, languages_used: [], reach_trend: [], activity: [], highlights: {} };
 
@@ -61,7 +63,7 @@ export default function Analytics() {
               <ResponsiveContainer width="55%" height={200}>
                 <PieChart>
                   <Pie data={data.languages_used} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={3}>
-                    {data.languages_used.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    {data.languages_used.map((l, i) => <Cell key={l.name} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip />
                 </PieChart>
@@ -79,7 +81,7 @@ export default function Analytics() {
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={data.reach_trend}>
               <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FF66B2" stopOpacity={0.5} /><stop offset="100%" stopColor="#FF66B2" stopOpacity={0} /></linearGradient></defs>
-              <XAxis dataKey="week" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip />
+              <XAxis dataKey="week" tick={AXIS_TICK} /><YAxis tick={AXIS_TICK} /><Tooltip />
               <Area type="monotone" dataKey="reach" stroke="#b0455b" strokeWidth={2} fill="url(#g)" />
             </AreaChart>
           </ResponsiveContainer>
@@ -88,8 +90,8 @@ export default function Analytics() {
         <Card title="Localization Activity">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={data.activity}>
-              <XAxis dataKey="week" tick={{ fontSize: 12 }} /><YAxis allowDecimals={false} tick={{ fontSize: 12 }} /><Tooltip />
-              <Bar dataKey="count" fill="#b0455b" radius={[6, 6, 0, 0]} />
+              <XAxis dataKey="week" tick={AXIS_TICK} /><YAxis allowDecimals={false} tick={AXIS_TICK} /><Tooltip />
+              <Bar dataKey="count" fill="#b0455b" radius={BAR_RADIUS} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
