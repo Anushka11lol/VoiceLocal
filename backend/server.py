@@ -344,24 +344,92 @@ async def get_project(pid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Project not found.")
     return row
 
+def _duration_to_seconds(d) -> int:
+    try:
+        parts = [int(x) for x in str(d or "0:0").split(":")]
+        if len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+        return int(parts[0])
+    except Exception:
+        return 0
+
+
+def _compute_analytics(projects: list) -> dict:
+    videos = len(projects)
+    generations = 0
+    total_sec = 0
+    lang_counts: dict = {}
+    day_counts: dict = {}
+    week_gen: dict = {}
+    now = datetime.now(timezone.utc)
+
+    for p in projects:
+        targets = p.get("target_languages") or []
+        generations += len(targets)
+        for t in targets:
+            lang_counts[t] = lang_counts.get(t, 0) + 1
+        total_sec += _duration_to_seconds(p.get("duration"))
+        try:
+            dt = datetime.fromisoformat(p.get("created_at"))
+        except Exception:
+            dt = now
+        day_counts[dt.date()] = day_counts.get(dt.date(), 0) + 1
+        monday = dt.date() - timedelta(days=dt.date().weekday())
+        week_gen[monday] = week_gen.get(monday, 0) + max(1, len(targets))
+
+    minutes = round(total_sec / 60)
+    reach_pct = min(99, generations * 4 + videos * 3) if videos else 0
+    stats = {"videos": videos, "languages": generations, "minutes": minutes, "reach": f"+{reach_pct}%"}
+
+    # Languages used distribution (top 3 + Others)
+    sorted_langs = sorted(lang_counts.items(), key=lambda x: -x[1])
+    languages_used = []
+    total = generations or 1
+    acc = 0
+    for code, c in sorted_langs[:3]:
+        pct = round(c * 100 / total)
+        acc += pct
+        languages_used.append({"name": LANG_BY_CODE.get(code, {}).get("name", code), "value": pct})
+    if len(sorted_langs) > 3 and (100 - acc) > 0:
+        languages_used.append({"name": "Others", "value": 100 - acc})
+
+    # Activity — projects created per day over the last 7 days
+    activity = []
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).date()
+        activity.append({"week": day.strftime("%a"), "count": day_counts.get(day, 0)})
+
+    # Audience reach — cumulative estimate over the last 6 weeks
+    this_monday = now.date() - timedelta(days=now.date().weekday())
+    reach_trend = []
+    cum = 0
+    for i in range(5, -1, -1):
+        wk = this_monday - timedelta(weeks=i)
+        cum += week_gen.get(wk, 0)
+        reach_trend.append({"week": wk.strftime("%d %b"), "reach": cum * 10})
+
+    most_lang = languages_used[0]["name"] if languages_used else "—"
+    highlights = {
+        "most_language": most_lang,
+        "completion_rate": "100%" if videos else "—",
+        "distinct_languages": len(lang_counts),
+    }
+    return {"stats": stats, "languages_used": languages_used,
+            "reach_trend": reach_trend, "activity": activity, "highlights": highlights}
+
+
+@api_router.get("/stats")
+async def user_stats(user: dict = Depends(get_current_user)):
+    projects = await db.projects.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    return _compute_analytics(projects)["stats"]
+
+
 @api_router.get("/analytics")
 async def analytics(user: dict = Depends(get_current_user)):
-    return {
-        "stats": {"videos": 12, "languages": 37, "minutes": 84, "reach": "+42%"},
-        "languages_used": [
-            {"name": "Bengali", "value": 42}, {"name": "Assamese", "value": 28},
-            {"name": "Tamil", "value": 15}, {"name": "Others", "value": 15},
-        ],
-        "reach_trend": [
-            {"week": "W1", "reach": 120}, {"week": "W2", "reach": 210},
-            {"week": "W3", "reach": 260}, {"week": "W4", "reach": 380},
-            {"week": "W5", "reach": 520}, {"week": "W6", "reach": 690},
-        ],
-        "activity": [
-            {"week": "Mon", "count": 2}, {"week": "Tue", "count": 4}, {"week": "Wed", "count": 3},
-            {"week": "Thu", "count": 6}, {"week": "Fri", "count": 5}, {"week": "Sat", "count": 8}, {"week": "Sun", "count": 4},
-        ],
-    }
+    projects = await db.projects.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    return _compute_analytics(projects)
 
 app.include_router(api_router)
 
