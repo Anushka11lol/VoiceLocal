@@ -1,0 +1,27 @@
+{
+  "summary": "Regression verification after code-quality refactor round (useMemo in Auth/A11y contexts, extracted recharts constants, stable list keys, catch-log fixes). Backend: all 17 pytest tests PASS (languages count=23, auth register/login/me + 401s, translate hi->bn returns Bengali script, TTS Bengali, projects CRUD+isolation, /api/stats and /api/analytics per-user zero-state + growth, transcribe returns ISO code + segments, export mp4 audio-only + muxed both return valid ftyp mp4). Frontend Playwright: (a) Logged-out '/' and '/dashboard' both redirect to /login; (b) demo login lands on /dashboard, stats populate to real values (videos=5, languages=10, minutes=4, reach='+55%'), 4 dashboard-project cards render; (c) screen-reader-toggle turns ON, sr-live-region updates on nav-features -> 'Features page', nav-demo -> 'Demo page', nav-home -> 'Home page'; (d) demo history shows 5 history-card entries, analytics is populated with 3 recharts SVGs and no analytics-empty; (e) fresh TEST user (registered inline) shows all stats as zero-placeholders and dashboard-empty/history-empty/analytics-empty visible; (f) full demo pipeline /demo -> run-demo-btn -> /localize?demo=1 -> generate-btn -> processing-screen -> /results works; Original/Localized/Subtitles tabs, localized-audio, download-video/download-audio/download-srt all present; 5 transcript-src and 5 transcript-tgt segments render with stable keys; Bengali script present in localized transcript; clicking a target segment highlights it (bg-pink-50). No blocking regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (initial paint after login)", "issues": ["Stat cards briefly show em-dash '—' placeholder until /api/stats resolves (~1-3s). Not a regression; acceptable but consider skeleton loader."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "React hydration console error in Localize.js <select> options: '<span> cannot be a child of <option>'. The span is injected by dev-time source-editor instrumentation (x-ve-dynamic, x-source-editable) wrapping {l.name} inside <option>. This is tooling-injected and does not affect production behavior, but pollutes the console during development and may cause hydration mismatch warnings. If reproducible outside dev overlay, wrap option label as a plain string ({String(l.name)}).",
+    "AuthContext useMemo refactor verified — no stale-closure regressions observed across login/logout/register/me and protected-route redirects.",
+    "A11yContext useMemo refactor verified — announce() reliably updates sr-live-region on nav events with SR toggle ON.",
+    "Stable-key refactor verified — Dashboard/History cards, Analytics Pie Cells, and Results transcript segments all render without React key warnings; segment click still drives highlight class."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% of targeted regression flows"},
+  "test_credentials": "demo@voicelocal.app / demo123 (has ~5 projects incl. TEST_ ones from prior runs). Fresh users registered per-run via /api/auth/register (TEST_<uuid>@example.com / secret123).",
+  "seed_data_creation": "test_projects_crud_and_isolation + test_stats_grows_with_projects created TEST_-prefixed projects (harmless).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor round is regression-clean. Testids unchanged. When asserting demo stats, note that TEST_ projects created by backend suite persist on demo account, so absolute stat numbers drift (currently 5/10/4/+55%). Assert only non-emptiness/>=1 for demo; assert exact zeros for freshly registered users. After demo login, wait ~2-3s for /api/stats to hydrate before reading stat card text (initial paint shows '—').",
+  "rca of the issue": "N/A — no bugs found."
+}

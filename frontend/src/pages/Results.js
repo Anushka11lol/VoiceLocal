@@ -84,9 +84,15 @@ export default function Results() {
           <h1 className="font-heading text-3xl font-bold text-slate-900">Your video is ready 🎉</h1>
           <p className="text-slate-500 mt-1">{langName(r.source)} → {r.targets.map(langName).join(", ")} · {r.title}</p>
         </div>
-        <button onClick={saveProject} data-testid="save-project-btn" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors">
-          <Save className="w-4 h-4" /> Save to History
-        </button>
+        {r.saved ? (
+          <span data-testid="saved-indicator" className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-full px-5 py-2.5 text-sm font-semibold">
+            <Check className="w-4 h-4" /> Saved to History
+          </span>
+        ) : (
+          <button onClick={saveProject} data-testid="save-project-btn" className="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors">
+            <Save className="w-4 h-4" /> Save to History
+          </button>
+        )}
       </div>
 
       {r.targets.length > 1 && (
@@ -167,7 +173,7 @@ export default function Results() {
       <div className="grid sm:grid-cols-3 gap-4 mt-6">
         {[
           ["Source", `${langName(r.source)} 🇮🇳`], ["Target", `${langName(active)} 🇮🇳`], ["Duration", r.duration],
-          ["Transcript", `${r.transcriptConfidence}% confidence`], ["Translation", `${out.confidence}% confidence`], ["Audio", out.audio ? "AI-generated" : "Disabled"],
+          ["Audio", out.audio ? "AI-generated" : "Disabled"],
         ].map(([k, v]) => (
           <div key={k} className="bg-white rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-400">{k}</p><p className="font-semibold text-slate-800 mt-0.5">{v}</p></div>
         ))}
@@ -180,7 +186,7 @@ export default function Results() {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-slate-400 uppercase mb-3">Original · {langNative(r.source)}</p>
             {out.segments.map((s, i) => (
-              <button key={i} onClick={() => { setSegIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
+              <button key={`src-${s.t}-${i}`} onClick={() => { setSegIdx(i); if (audioRef.current) audioRef.current.play(); }} data-testid={`transcript-src-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.text}</span>
               </button>
@@ -189,7 +195,7 @@ export default function Results() {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-maroon-700 uppercase mb-3">Localized · {langNative(active)}</p>
             {out.segments.map((s, i) => (
-              <button key={i} onClick={() => setSegIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
+              <button key={`tgt-${s.t}-${i}`} onClick={() => setSegIdx(i)} data-testid={`transcript-tgt-${i}`} className={`w-full text-left flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-blue-50 ${segIdx === i ? "bg-pink-50" : ""}`}>
                 <span className="text-xs text-maroon-600 font-mono shrink-0 pt-0.5">{s.t}</span>
                 <span className="text-sm text-slate-700">{s.translated}</span>
               </button>

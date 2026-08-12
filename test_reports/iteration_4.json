@@ -1,0 +1,19 @@
+{
+  "summary": "Verified per-user real stats replacing old hardcoded demo numbers. Backend: added/updated tests for GET /api/stats and per-user GET /api/analytics (empty state for fresh user, growth after creating 2 projects with target langs ['bn'] + ['ta','te'] and durations 00:42 & 01:00 -> videos=2, languages=3, minutes=2, reach='+18%'). Previous test_analytics assertion (videos==12) was outdated for the new per-user endpoint and has been rewritten. All 12 backend tests pass. Frontend Playwright: (a) demo@voicelocal.app dashboard shows real values 4/8/3/+44% (NOT old 12/37/84/+42%), 4 dashboard-project cards, no dashboard-empty; subtext 'Your localization statistics, updated from your projects.' present; (b) demo analytics is populated and '(Demo data)' label is GONE; (c) demo history shows 4 history-card entries, no history-empty; (d) freshly registered TEST user sees stat-videos=0, stat-languages=0, stat-minutes=0, stat-reach='+0%', dashboard-empty visible with zero project cards, history-empty visible, analytics-empty visible, and no '(Demo data)' anywhere. No console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_compute_analytics: reach formula 'min(99, generations*4 + videos*3)' is fine but note that a fresh user with videos=0 also yields reach='+0%'; matches spec.",
+    "_duration_to_seconds silently returns 0 on malformed input — acceptable, but consider logging so client-side format regressions are noticeable.",
+    "GET /api/stats currently recomputes full analytics then discards non-stats fields; small optimization opportunity to compute only counters if the endpoint sees heavy use."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% of statistical/empty-state assertions"},
+  "test_credentials": "demo@voicelocal.app / demo123 (user with 4 existing projects). Fresh user registered per-run via /api/auth/register (TEST_<uuid>@example.com / secret123).",
+  "seed_data_creation": "test_stats_grows_with_projects creates 2 TEST_ projects for a fresh user each run; test_projects_crud_and_isolation creates 1 TEST_ project on demo account. Data not cleaned up (existing pattern; harmless TEST_ prefix).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Statistics/analytics endpoints are now per-user. Do NOT assert absolute values for demo user (project count changes as suites create TEST_ projects). Assert only structure & non-emptiness for demo, and exact zeros/empties for freshly registered users. Testids in use: stat-videos, stat-languages, stat-minutes, stat-reach, dashboard-empty, dashboard-project-#, history-empty, history-card-#, analytics-empty. Note that stat card element text_content includes both the value and its label concatenated (e.g. '0Videos Localized') — read the leading digits/percent portion when comparing."
+}

@@ -8,8 +8,8 @@ import requests
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://localize-video-1.preview.emergentagent.com').rstrip('/')
 API = f"{BASE_URL}/api"
 
-DEMO_EMAIL = os.environ.get("DEMO_EMAIL","demo@voicelocal.app")
-DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD")
+DEMO_EMAIL = os.environ.get("VL_TEST_EMAIL", "demo@voicelocal.app")
+DEMO_PASSWORD = os.environ.get("VL_TEST_PASSWORD", "demo123")
 
 
 @pytest.fixture(scope="session")
@@ -135,21 +135,81 @@ def test_projects_requires_auth(s):
     assert r.status_code == 401
 
 
-# ------- Analytics -------
-def test_analytics(s, demo_token):
+# ------- Analytics / Stats (per-user, real data) -------
+def test_analytics_demo_user(s, demo_token):
     h = {"Authorization": f"Bearer {demo_token}"}
     r = s.get(f"{API}/analytics", headers=h)
     assert r.status_code == 200
     j = r.json()
-    assert isinstance(j["stats"]["videos"], int)
-    assert j["stats"]["videos"] >= 0
+    # demo user has projects; must be non-empty real data
+    assert j["stats"]["videos"] >= 1
+    assert isinstance(j["stats"]["reach"], str) and j["stats"]["reach"].startswith("+")
     assert "languages_used" in j and len(j["languages_used"]) > 0
-    assert "reach_trend" in j and "activity" in j
+    assert "reach_trend" in j and len(j["reach_trend"]) == 6
+    assert "activity" in j and len(j["activity"]) == 7
+    assert "highlights" in j
+    assert j["highlights"]["most_language"] != "—"
+    assert j["highlights"]["distinct_languages"] >= 1
 
 
 def test_analytics_requires_auth():
     r = requests.get(f"{API}/analytics")
     assert r.status_code == 401
+
+
+def test_stats_requires_auth():
+    r = requests.get(f"{API}/stats")
+    assert r.status_code == 401
+
+
+def test_stats_and_analytics_fresh_user_empty(s):
+    """Brand new user with no projects must see zeros/empty."""
+    email = f"TEST_{uuid.uuid4().hex[:8]}@example.com"
+    reg = s.post(f"{API}/auth/register", json={"name": "Fresh", "email": email, "password": "secret123"})
+    assert reg.status_code == 200
+    tok = reg.json()["token"]
+    h = {"Authorization": f"Bearer {tok}"}
+
+    r = s.get(f"{API}/stats", headers=h)
+    assert r.status_code == 200
+    st = r.json()
+    assert st == {"videos": 0, "languages": 0, "minutes": 0, "reach": "+0%"}
+
+    r = s.get(f"{API}/analytics", headers=h)
+    assert r.status_code == 200
+    a = r.json()
+    assert a["stats"]["videos"] == 0
+    assert a["languages_used"] == []
+    assert a["highlights"]["distinct_languages"] == 0
+    assert a["highlights"]["most_language"] == "—"
+
+
+def test_stats_grows_with_projects(s):
+    """Create 2 projects for a fresh user and confirm stats grow accordingly."""
+    email = f"TEST_{uuid.uuid4().hex[:8]}@example.com"
+    reg = s.post(f"{API}/auth/register", json={"name": "Grow", "email": email, "password": "secret123"})
+    tok = reg.json()["token"]
+    h = {"Authorization": f"Bearer {tok}"}
+
+    p1 = {"title": "TEST P1", "source_language": "hi", "target_languages": ["bn"], "duration": "00:42"}
+    p2 = {"title": "TEST P2", "source_language": "hi", "target_languages": ["ta", "te"], "duration": "01:00"}
+    assert s.post(f"{API}/projects", json=p1, headers=h).status_code == 200
+    assert s.post(f"{API}/projects", json=p2, headers=h).status_code == 200
+
+    st = s.get(f"{API}/stats", headers=h).json()
+    assert st["videos"] == 2
+    assert st["languages"] == 3  # bn + ta + te
+    # 42s + 60s = 102s => round(102/60) = 2
+    assert st["minutes"] in (1, 2)
+    assert st["reach"].startswith("+") and st["reach"].endswith("%")
+    assert st["reach"] != "+0%"
+
+    a = s.get(f"{API}/analytics", headers=h).json()
+    names = {x["name"] for x in a["languages_used"]}
+    # Names come from LANG_BY_CODE lookup
+    assert len(names) >= 1
+    assert a["highlights"]["distinct_languages"] == 3
+    assert a["highlights"]["most_language"] in names
 
 
 # ------- New: Transcribe (REAL Whisper) -------
